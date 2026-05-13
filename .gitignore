@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.agent_1/
+*.log
+.DS_Store
+desktop/dist/
+desktop/release/
+web/dist/
+coverage/
+.env
+.env.local
+*.tsbuildinfo
+.eslintcache

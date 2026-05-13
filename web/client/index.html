@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <title>agent_1 Web</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #1a1a2e;
+      --bg-secondary: #16213e;
+      --bg-tertiary: #0f3460;
+      --text-primary: #e0e0e0;
+      --text-secondary: #a0a0b0;
+      --accent-cyan: #00d4ff;
+      --accent-green: #00ff88;
+      --accent-red: #ff4444;
+      --accent-yellow: #ffbb33;
+      --accent-blue: #4488ff;
+      --border-color: #2a2a4a;
+      --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+      --font-sans: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+    ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--bg-tertiary); }
+
+    .header {
+      padding: 8px 16px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 42px;
+    }
+
+    .header-logo {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      letter-spacing: 0.5px;
+    }
+
+    .header-status {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      padding: 3px 10px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    .header-status.connected {
+      background: rgba(0, 255, 136, 0.1);
+      color: var(--accent-green);
+      border: 1px solid rgba(0, 255, 136, 0.2);
+    }
+
+    .header-status.disconnected {
+      background: rgba(255, 68, 68, 0.1);
+      color: var(--accent-red);
+      border: 1px solid rgba(255, 68, 68, 0.2);
+    }
+
+    .header-status.connecting {
+      background: rgba(255, 187, 51, 0.1);
+      color: var(--accent-yellow);
+      border: 1px solid rgba(255, 187, 51, 0.2);
+    }
+
+    .header-info {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+
+    .messages {
+      flex: 1;
+      overflow: auto;
+      padding: 8px 0;
+    }
+
+    .message {
+      display: flex;
+      padding: 8px 20px;
+      gap: 14px;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .message.user .message-avatar {
+      background: var(--accent-blue);
+      color: #fff;
+    }
+
+    .message.assistant .message-avatar {
+      background: var(--accent-cyan);
+      color: #1a1a2e;
+    }
+
+    .message.system .message-avatar {
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+    }
+
+    .message-bubble {
+      max-width: 75%;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      padding: 10px 16px;
+      line-height: 1.55;
+      font-size: 14px;
+      word-break: break-word;
+    }
+
+    .message.user .message-bubble {
+      background: var(--bg-tertiary);
+      border-radius: 12px 12px 4px 12px;
+    }
+
+    .message.assistant .message-bubble {
+      border-radius: 12px 12px 12px 4px;
+    }
+
+    .message.system .message-bubble {
+      background: transparent;
+      border: 1px dashed var(--border-color);
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .message-time {
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .message-content pre {
+      background: var(--bg-primary);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      overflow-x: auto;
+      margin: 8px 0;
+      border: 1px solid var(--border-color);
+    }
+
+    .message-content code {
+      background: var(--bg-primary);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .message-content pre code {
+      background: none;
+      padding: 0;
+    }
+
+    .empty-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      flex-direction: column;
+      gap: 12px;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      opacity: 0.3;
+    }
+
+    .input-area {
+      padding: 8px 20px 14px;
+      border-top: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    .input-row textarea {
+      flex: 1;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      resize: none;
+      outline: none;
+      line-height: 1.5;
+      min-height: 42px;
+      max-height: 120px;
+      transition: border-color 0.15s;
+    }
+
+    .input-row textarea:focus {
+      border-color: var(--accent-cyan);
+    }
+
+    .input-row textarea.interrupt {
+      border-color: var(--accent-yellow);
+    }
+
+    .btn {
+      padding: 10px 22px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-send {
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      color: #fff;
+    }
+
+    .btn-send:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,212,255,0.3); }
+    .btn-send:disabled { opacity: 0.4; cursor: default; transform: none; box-shadow: none; }
+
+    .btn-abort {
+      background: transparent;
+      color: var(--accent-red);
+      border: 1px solid var(--accent-red);
+      font-size: 12px;
+    }
+
+    .btn-abort:hover { background: rgba(255,68,68,0.1); }
+
+    .btn-interrupt {
+      background: linear-gradient(135deg, var(--accent-yellow), #ff8800);
+      color: #1a1a2e;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      padding: 3px 16px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      background: var(--bg-primary);
+      border-top: 1px solid var(--border-color);
+      gap: 16px;
+      color: var(--text-secondary);
+      min-height: 26px;
+    }
+
+    .status-bar .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent-green);
+    }
+
+    .status-bar .dot.disconnected { background: var(--accent-red); }
+    .status-bar .dot.connecting { background: var(--accent-yellow); animation: pulse 1s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .spinner {
+      display: inline-block;
+      animation: spin 0.8s linear infinite;
+      font-size: 14px;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .thinking-indicator {
+      padding: 8px 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--accent-cyan);
+      font-family: var(--font-mono);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="header-logo">agent_1</span>
+    <span class="header-status disconnected" id="status-badge">Disconnected</span>
+    <span class="header-info" id="header-info"></span>
+  </div>
+
+  <div class="messages" id="messages">
+    <div class="empty-state">
+      <span class="icon">🤖</span>
+      <span>Connecting to agent_1 server...</span>
+      <span style="font-size:12px;opacity:0.5">If the connection doesn't establish, ensure the server is running.</span>
+    </div>
+  </div>
+
+  <div class="thinking-indicator" id="thinking" style="display:none">
+    <span class="spinner">◌</span>
+    <span id="thinking-text">Thinking...</span>
+  </div>
+
+  <div class="input-area">
+    <div class="input-row">
+      <textarea id="input" placeholder="Describe your task..." rows="2" disabled></textarea>
+      <button class="btn btn-send" id="btn-send" disabled>Send</button>
+      <button class="btn btn-abort" id="btn-abort" style="display:none">Abort</button>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span class="dot disconnected" id="status-dot"></span>
+    <span id="status-text">Disconnected</span>
+    <span style="flex:1"></span>
+    <span>agent_1 v1.0.0 Web Client</span>
+  </div>
+
+  <script>
+    (function() {
+      const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+      const BASE_DELAY = 1000;
+      const MAX_DELAY = 30000;
+      const MAX_RECONNECT_ATTEMPTS = 10;
+      const HEARTBEAT_CHECK_INTERVAL = 10000;
+
+      let ws = null;
+      let reconnectAttempts = 0;
+      let isProcessing = false;
+      let pendingMessages = [];
+      let inputHistory = [];
+      let historyIndex = -1;
+      let heartbeatTimer = null;
+      let lastActivityTime = Date.now();
+
+      const $messages = document.getElementById('messages');
+      const $input = document.getElementById('input');
+      const $btnSend = document.getElementById('btn-send');
+      const $btnAbort = document.getElementById('btn-abort');
+      const $thinking = document.getElementById('thinking');
+      const $thinkingText = document.getElementById('thinking-text');
+      const $statusBadge = document.getElementById('status-badge');
+      const $statusDot = document.getElementById('status-dot');
+      const $statusText = document.getElementById('status-text');
+      const $headerInfo = document.getElementById('header-info');
+
+      function setConnectionStatus(status) {
+        $statusBadge.className = 'header-status ' + status;
+        $statusBadge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+        $statusDot.className = 'dot ' + (status === 'connected' ? '' : status);
+        $statusText.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+
+        if (status === 'connected') {
+          $input.disabled = false;
+          $btnSend.disabled = true;
+          $input.focus();
+        } else if (status === 'connecting') {
+          $input.disabled = true;
+        } else {
+          $input.disabled = true;
+          $btnSend.disabled = true;
+        }
+      }
+
+      function addMessage(role, content, timestamp) {
+        const div = document.createElement('div');
+        div.className = 'message ' + role;
+
+        const avatarChar = role === 'user' ? 'U' : role === 'system' ? 'S' : 'A';
+        const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+
+        div.innerHTML = `
+          <div class="message-avatar">${avatarChar}</div>
+          <div>
+            <div class="message-bubble">
+              <div class="message-content">${formatContent(content)}</div>
+            </div>
+            <div class="message-time">${time}</div>
+          </div>
+        `;
+
+        const emptyState = $messages.querySelector('.empty-state');
+        if (emptyState) emptyState.remove();
+
+        $messages.appendChild(div);
+        $messages.scrollTop = $messages.scrollHeight;
+      }
+
+      function formatContent(text) {
+        let escaped = text
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+
+        escaped = escaped.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+        escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+        escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        escaped = escaped.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+        return escaped;
+      }
+
+      function setThinking(active, text) {
+        if (active) {
+          $thinking.style.display = 'flex';
+          $thinkingText.textContent = text || 'Thinking...';
+          $btnAbort.style.display = 'inline-block';
+          $btnSend.style.display = 'none';
+          $input.className = 'interrupt';
+          $input.placeholder = '>> Interrupt with new instructions...';
+        } else {
+          $thinking.style.display = 'none';
+          $btnAbort.style.display = 'none';
+          $btnSend.style.display = 'inline-block';
+          $input.className = '';
+          $input.placeholder = 'Describe your task...';
+        }
+      }
+
+      function connect() {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+          return;
+        }
+
+        setConnectionStatus('connecting');
+        ws = new WebSocket(WS_URL);
+
+        ws.onopen = () => {
+          console.log('[agent_1-web] Connected');
+          setConnectionStatus('connected');
+          reconnectAttempts = 0;
+          $headerInfo.textContent = '';
+
+          if (pendingMessages.length > 0) {
+            const next = pendingMessages.shift();
+            sendQuery(next.text, next.interrupt);
+          }
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+
+            switch (message.type) {
+              case 'result': {
+                const payload = message.payload;
+                if (payload.response && payload.response.content) {
+                  const role = payload.response.model === 'state' ? 'system' : 'assistant';
+                  addMessage(role, payload.response.content, new Date().toISOString());
+
+                  if (payload.stopReason === 'end_turn') {
+                    setThinking(false);
+                    isProcessing = false;
+                  }
+                }
+                break;
+              }
+
+              case 'error': {
+                addMessage('system', 'Error: ' + message.message);
+                setThinking(false);
+                isProcessing = false;
+                break;
+              }
+            }
+          } catch (e) {
+            console.error('[agent_1-web] Parse error:', e);
+          }
+        };
+
+        ws.onclose = (event) => {
+          console.log('[agent_1-web] Disconnected:', event.code, event.reason);
+          setConnectionStatus('disconnected');
+          setThinking(false);
+          isProcessing = false;
+          ws = null;
+
+          if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+            heartbeatTimer = null;
+          }
+
+          if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttempts++;
+            const delay = Math.min(BASE_DELAY * Math.pow(2, reconnectAttempts - 1), MAX_DELAY);
+            const jitter = delay * 0.3 * Math.random();
+            const totalDelay = Math.round(delay + jitter);
+            $headerInfo.textContent = `Reconnecting in ${(totalDelay / 1000).toFixed(1)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`;
+            setTimeout(connect, totalDelay);
+          } else {
+            $headerInfo.textContent = 'Max reconnection attempts reached. Refresh to retry.';
+          }
+        };
+
+        ws.onerror = (err) => {
+          console.error('[agent_1-web] WebSocket error');
+        };
+      }
+
+      function sendQuery(text, interrupt) {
+        const userMsg = {
+          type: 'query',
+          payload: {
+            text: text,
+            timestamp: new Date().toISOString(),
+            interrupt: interrupt || false
+          }
+        };
+
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          pendingMessages.push({ text, interrupt });
+          addMessage('system', 'Disconnected. Message queued. Reconnecting...');
+          connect();
+          return;
+        }
+
+        addMessage('user', text);
+        setThinking(true, interrupt ? 'Adjusting direction...' : 'Thinking...');
+        isProcessing = true;
+        ws.send(JSON.stringify(userMsg));
+      }
+
+      function abortQuery() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'result',
+            payload: {
+              response: { content: 'User aborted', model: 'abort' },
+              stopReason: 'stop_sequence'
+            }
+          }));
+        }
+        setThinking(false);
+        isProcessing = false;
+      }
+
+      $input.addEventListener('input', () => {
+        $btnSend.disabled = $input.value.trim().length === 0;
+      });
+
+      $input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          const text = $input.value.trim();
+          if (text) {
+            inputHistory.push(text);
+            historyIndex = inputHistory.length;
+
+            const isInterrupt = isProcessing;
+            sendQuery(text, isInterrupt);
+            $input.value = '';
+            $btnSend.disabled = true;
+          }
+        } else if (e.key === 'ArrowUp' && !e.shiftKey) {
+          e.preventDefault();
+          if (historyIndex > 0) {
+            historyIndex--;
+            $input.value = inputHistory[historyIndex];
+          }
+        } else if (e.key === 'ArrowDown' && !e.shiftKey) {
+          e.preventDefault();
+          if (historyIndex < inputHistory.length - 1) {
+            historyIndex++;
+            $input.value = inputHistory[historyIndex];
+          } else {
+            historyIndex = inputHistory.length;
+            $input.value = '';
+          }
+        }
+      });
+
+      $btnSend.addEventListener('click', () => {
+        const text = $input.value.trim();
+        if (text) {
+          inputHistory.push(text);
+          historyIndex = inputHistory.length;
+          sendQuery(text, isProcessing);
+          $input.value = '';
+          $btnSend.disabled = true;
+        }
+      });
+
+      $btnAbort.addEventListener('click', () => {
+        abortQuery();
+      });
+
+      connect();
+    })();
+  </script>
+</body>
+</html>

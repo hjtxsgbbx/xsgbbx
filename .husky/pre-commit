@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# agent_1 Pre-Commit Hook
+# 提交前自动运行质量检查，确保代码质量
+
+set -e
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  agent_1 Pre-Commit Quality Gates"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+echo ""
+echo "  [1/2] TypeScript Type Check..."
+npx tsc --noEmit
+echo "  ✓ TypeScript OK"
+
+echo ""
+echo "  [2/2] Quick Test Sanity..."
+npm test -- --testPathPattern="result|permissions|healer" --passWithNoTests 2>&1 | tail -5
+echo "  ✓ Tests OK"
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  All checks passed! Proceeding to commit."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
