@@ -1,10 +1,8 @@
 import { execSync } from "child_process";
-import { PlatformInfo } from "../types/index.js";
+import { type PlatformInfo } from "../types/index.js";
 
-interface KeychainEntry {
-  service: string;
-  account: string;
-  password: string;
+function escapeShellArg(arg: string): string {
+  return arg.replace(/'/g, "''");
 }
 
 export async function keychainGet(
@@ -66,7 +64,7 @@ async function windowsGet(
   service: string,
   account: string
 ): Promise<string | null> {
-    const cmd = `powershell -Command "(Get-StoredCredential -Target '${service}_${account}').GetNetworkCredential().Password"`;
+    const cmd = `powershell -Command "(Get-StoredCredential -Target '${escapeShellArg(service)}_${escapeShellArg(account)}').GetNetworkCredential().Password"`;
   try {
     const result = execSync(cmd, { encoding: "utf-8", stdio: "pipe" });
     return result.trim() || null;
@@ -80,7 +78,7 @@ async function windowsSet(
   account: string,
   password: string
 ): Promise<boolean> {
-    const cmd = `powershell -Command "$secureString = ConvertTo-SecureString '${password}' -AsPlainText -Force; $credential = New-Object System.Management.Automation.PSCredential('${account}', $secureString); New-StoredCredential -Target '${service}_${account}' -Credential $credential -Persist LocalMachine"`;
+    const cmd = `powershell -Command "$secureString = ConvertTo-SecureString '${escapeShellArg(password)}' -AsPlainText -Force; $credential = New-Object System.Management.Automation.PSCredential('${escapeShellArg(account)}', $secureString); New-StoredCredential -Target '${escapeShellArg(service)}_${escapeShellArg(account)}' -Credential $credential -Persist LocalMachine"`;
   try {
     execSync(cmd, { encoding: "utf-8", stdio: "pipe" });
     return true;
@@ -93,7 +91,7 @@ async function windowsDelete(
   service: string,
   account: string
 ): Promise<boolean> {
-    const cmd = `powershell -Command "Remove-StoredCredential -Target '${service}_${account}'"`;
+    const cmd = `powershell -Command "Remove-StoredCredential -Target '${escapeShellArg(service)}_${escapeShellArg(account)}'"`;
   try {
     execSync(cmd, { encoding: "utf-8", stdio: "pipe" });
     return true;
@@ -102,11 +100,15 @@ async function windowsDelete(
   }
 }
 
+function escapeDoubleQuoteArg(arg: string): string {
+  return arg.replace(/"/g, '\\"').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+}
+
 async function macosGet(
   service: string,
   account: string
 ): Promise<string | null> {
-    const cmd = `security find-generic-password -s "${service}" -a "${account}" -w 2>/dev/null`;
+    const cmd = `security find-generic-password -s "${escapeDoubleQuoteArg(service)}" -a "${escapeDoubleQuoteArg(account)}" -w 2>/dev/null`;
   try {
     const result = execSync(cmd, { encoding: "utf-8", stdio: "pipe" });
     return result.trim() || null;
@@ -120,7 +122,7 @@ async function macosSet(
   account: string,
   password: string
 ): Promise<boolean> {
-    const cmd = `security add-generic-password -s "${service}" -a "${account}" -w "${password}" -U 2>/dev/null`;
+    const cmd = `security add-generic-password -s "${escapeDoubleQuoteArg(service)}" -a "${escapeDoubleQuoteArg(account)}" -w "${escapeDoubleQuoteArg(password)}" -U 2>/dev/null`;
   try {
     execSync(cmd, { encoding: "utf-8", stdio: "pipe" });
     return true;
@@ -133,7 +135,7 @@ async function macosDelete(
   service: string,
   account: string
 ): Promise<boolean> {
-    const cmd = `security delete-generic-password -s "${service}" -a "${account}" 2>/dev/null`;
+    const cmd = `security delete-generic-password -s "${escapeDoubleQuoteArg(service)}" -a "${escapeDoubleQuoteArg(account)}" 2>/dev/null`;
   try {
     execSync(cmd, { encoding: "utf-8", stdio: "pipe" });
     return true;
@@ -147,7 +149,7 @@ async function linuxGet(
   account: string
 ): Promise<string | null> {
   try {
-        const cmd = `secret-tool lookup service "${service}" account "${account}" 2>/dev/null`;
+        const cmd = `secret-tool lookup service "${escapeDoubleQuoteArg(service)}" account "${escapeDoubleQuoteArg(account)}" 2>/dev/null`;
     const result = execSync(cmd, { encoding: "utf-8", stdio: "pipe" });
     return result.trim() || null;
   } catch {
@@ -161,7 +163,7 @@ async function linuxSet(
   password: string
 ): Promise<boolean> {
   try {
-        const cmd = `echo "${password}" | secret-tool store --label="agent_1" service "${service}" account "${account}" 2>/dev/null`;
+        const cmd = `echo "${escapeDoubleQuoteArg(password)}" | secret-tool store --label="agent_1" service "${escapeDoubleQuoteArg(service)}" account "${escapeDoubleQuoteArg(account)}" 2>/dev/null`;
     execSync(cmd, { encoding: "utf-8", stdio: "pipe" });
     return true;
   } catch {
@@ -174,7 +176,7 @@ async function linuxDelete(
   account: string
 ): Promise<boolean> {
   try {
-        const cmd = `secret-tool clear service "${service}" account "${account}" 2>/dev/null`;
+        const cmd = `secret-tool clear service "${escapeDoubleQuoteArg(service)}" account "${escapeDoubleQuoteArg(account)}" 2>/dev/null`;
     execSync(cmd, { encoding: "utf-8", stdio: "pipe" });
     return true;
   } catch {

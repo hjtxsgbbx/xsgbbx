@@ -3,8 +3,8 @@
     "target": "ES2022",
     "module": "Node16",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "outDir": "./dist",
-    "rootDir": ".",
+    "outDir": "../dist-desktop",
+    "rootDir": "..",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -14,13 +14,8 @@
     "declaration": true,
     "sourceMap": true,
     "jsx": "react-jsx",
-    "moduleResolution": "node16",
-    "baseUrl": ".",
-    "paths": {
-      "@core/*": ["../src/core/*"],
-      "@types": ["../src/types/index"]
-    }
+    "moduleResolution": "node16"
   },
-  "include": ["main/**/*", "preload/**/*", "renderer/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["main/**/*", "preload/**/*", "renderer/**/*", "../src/**/*.ts"],
+  "exclude": ["node_modules", "../src/index.ts", "../src/cli/main.tsx", "../src/cli/app.tsx"]
 }

@@ -122,7 +122,7 @@ export function applyEdit(
     ...fileLines.slice(matchIndex + searchLines.length),
   ];
 
-  const result = resultLines.join("\n");
+  const _result = resultLines.join("\n");
 
   return {
     success: true,

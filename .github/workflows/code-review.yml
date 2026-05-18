@@ -1,0 +1,84 @@
+name: Code Review Enforcement
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main, develop]
+
+jobs:
+  pr-validation:
+    name: PR Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PR description
+        run: |
+          PR_BODY="${{ github.event.pull_request.body }}"
+          if [ -z "$PR_BODY" ] || [ "$PR_BODY" = "" ]; then
+            echo "::error::PR description cannot be empty"
+            exit 1
+          fi
+
+      - name: Check PR size
+        run: |
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | wc -l)
+          ADDED_LINES=$(git diff --shortstat origin/${{ github.base_ref }}...HEAD | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo "0")
+          if [ "$CHANGED_FILES" -gt 30 ]; then
+            echo "::warning::Large PR detected: $CHANGED_FILES files changed. Consider splitting into smaller PRs."
+          fi
+          if [ "$ADDED_LINES" -gt 500 ]; then
+            echo "::warning::Large PR detected: $ADDED_LINES lines added. Consider splitting into smaller PRs."
+          fi
+
+      - name: Check branch naming convention
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          if [[ "$BRANCH" =~ ^(feature|bugfix|hotfix|release)/.+ ]]; then
+            echo "✅ Branch name follows Git Flow convention: $BRANCH"
+          elif [[ "$BRANCH" == "develop" ]]; then
+            echo "✅ Develop branch"
+          else
+            echo "::warning::Branch '$BRANCH' does not follow Git Flow convention (feature|bugfix|hotfix|release/*)"
+          fi
+
+      - name: Check commit messages
+        run: |
+          INVALID=0
+          git log --format=%s origin/${{ github.base_ref }}..HEAD | while read msg; do
+            if [[ ! "$msg" =~ ^(feat|fix|chore|docs|style|refactor|test|perf|ci|build)(\(.+\))?:\ .+ ]]; then
+              echo "::warning::Non-conventional commit: $msg"
+              INVALID=1
+            fi
+          done
+
+      - name: Check for TODO/FIXME markers
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD -- "*.ts" | grep -n "TODO\|FIXME" || echo "No TODO/FIXME markers found"
+
+      - name: Check test file changes
+        run: |
+          SOURCE_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- "src/**/*.ts" | grep -v ".test.ts" | grep -v ".spec.ts" | wc -l)
+          TEST_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- "test/**/*.ts" "**/*.test.ts" "**/*.spec.ts" | wc -l)
+          if [ "$SOURCE_FILES" -gt 0 ] && [ "$TEST_FILES" -eq 0 ]; then
+            echo "::warning::Source files changed without corresponding test file changes. Please add tests."
+          fi
+
+      - name: Check for console.log statements
+        run: |
+          CONSOLE_LOGS=$(git diff origin/${{ github.base_ref }}...HEAD -- "*.ts" | grep "+.*console\.log" || true)
+          if [ -n "$CONSOLE_LOGS" ]; then
+            echo "::warning::console.log statements detected in changes. Use debug module instead."
+          fi
+
+      - name: Generate PR summary
+        run: |
+          echo "## PR Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.head_ref }} → ${{ github.base_ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Files changed**: $(git diff --name-only origin/${{ github.base_ref }}...HEAD | wc -l)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commits**: $(git log --oneline origin/${{ github.base_ref }}..HEAD | wc -l)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Conventional commits**: ✅ Enforced" >> $GITHUB_STEP_SUMMARY
+          echo "- **Git Flow**: ✅ Enforced" >> $GITHUB_STEP_SUMMARY

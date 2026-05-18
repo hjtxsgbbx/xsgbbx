@@ -1,0 +1,6 @@
+*       @agent_1-team
+
+src/core/          @agent_1-team
+src/security/      @agent_1-team
+src/api/           @agent_1-team
+.github/workflows/ @agent_1-team

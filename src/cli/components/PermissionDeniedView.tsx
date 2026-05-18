@@ -15,7 +15,7 @@ export const PermissionDeniedView: React.FC<PermissionDeniedViewProps> = ({
       <Text color="red">✖ {message}</Text>
       {isOverrideable && (
         <Text dimColor>
-          [?] Type "I understand the risk" to override: _
+          [?] Type "y" or "yes" to override: _
         </Text>
       )}
     </Box>

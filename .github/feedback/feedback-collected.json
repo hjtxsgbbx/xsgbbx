@@ -1,0 +1,10 @@
+{
+  "feedback": [],
+  "collectedAt": null,
+  "totalFeedback": 0,
+  "sentimentDistribution": {
+    "positive": 0,
+    "neutral": 0,
+    "negative": 0
+  }
+}

@@ -1,4 +1,4 @@
-import * as tls from "tls";
+import type * as tls from "tls";
 import * as crypto from "crypto";
 
 const KNOWN_FINGERPRINTS: Record<string, string[]> = {

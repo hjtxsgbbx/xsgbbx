@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "description": "agent_1 Web 端 - WebSocket 远程连接服务",
   "type": "module",
-  "main": "./dist/server.js",
+  "main": "../dist-web/web/server.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js",
-    "dev": "tsc -p tsconfig.json && node dist/server.js"
+    "build": "tsc -p tsconfig.json && node -e \"const fs=require('fs');fs.mkdirSync('../dist-web/web/client',{recursive:true});fs.cpSync('client','../dist-web/web/client',{recursive:true})\"",
+    "start": "node ../dist-web/web/server.js",
+    "dev": "tsc -p tsconfig.json && node -e \"const fs=require('fs');fs.mkdirSync('../dist-web/web/client',{recursive:true});fs.cpSync('client','../dist-web/web/client',{recursive:true})\" && node ../dist-web/web/server.js"
   },
   "dependencies": {
     "ws": "^8.16.0",

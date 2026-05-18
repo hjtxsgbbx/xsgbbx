@@ -1,24 +1,46 @@
 {
-  "name": "agent_1",
+  "name": "xsgbbx",
   "version": "1.0.0",
   "description": "跨平台 AI 编程助手 - CLI / Desktop / Web 三端统一",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "agent_1": "./dist/index.js"
+    "xsgbbx": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.cjs",
-    "lint": "eslint src/",
+    "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.cjs --testPathPattern='test/(?!integration|e2e|benchmark)'",
+    "test:integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.cjs --testPathPattern='test/integration'",
+    "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.cjs --testPathPattern='test/e2e'",
+    "test:benchmark": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.cjs --testPathPattern='test/benchmark'",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.cjs --coverage",
+    "lint": "eslint src/ --no-error-on-unmatched-pattern",
+    "lint:fix": "eslint src/ --fix --no-error-on-unmatched-pattern",
     "typecheck": "tsc --noEmit",
     "prepare": "husky",
     "desktop:build": "cd desktop && npm run build",
     "desktop:dev": "cd desktop && npm run dev",
     "web:build": "cd web && npm run build",
-    "web:start": "cd web && npm run start"
+    "web:start": "cd web && npm run start",
+    "benchmark:baseline": "npx jest --config jest.config.cjs --testPathPattern='test/benchmark' --verbose --forceExit",
+    "sprint:report": "npx tsx scripts/dev/sprint-burndown.ts",
+    "sprint:init": "npx tsx scripts/dev/init-sprint1.ts",
+    "sprint:kickoff": "echo 'Use docs/templates/sprint-kickoff.md to create a new sprint plan'",
+    "standup": "bash scripts/dev/daily-standup.sh",
+    "standup:win": "pwsh -File scripts/dev/daily-standup.ps1",
+    "standup:auto": "npx tsx scripts/dev/iteration-report.ts standup",
+    "burndown": "npx tsx scripts/dev/iteration-report.ts burndown",
+    "iter:plan": "npx tsx scripts/dev/iteration-report.ts plan",
+    "iter:cli": "npx tsx scripts/dev/iteration-cli.ts",
+    "feedback:collect": "pwsh -File scripts/dev/collect-feedback.ps1",
+    "version:bump": "bash scripts/release/version.sh",
+    "version:bump:win": "pwsh -File scripts/release/version.ps1",
+    "release:check": "pwsh -Command \"Get-Content docs/templates/release-checklist.md\"",
+    "retro:create": "echo 'Use docs/templates/sprint-retrospective.md to create a retro doc'",
+    "gate:precommit": "pwsh -File .husky/pre-commit.ps1"
   },
   "dependencies": {
     "chalk": "^5.3.0",
@@ -28,17 +50,18 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.0",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.0",
     "@types/uuid": "^9.0.0",
-    "typescript": "^5.3.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.1.0",
-    "@types/jest": "^29.5.0",
-    "eslint": "^8.56.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "husky": "^9.0.0"
+    "eslint": "^8.56.0",
+    "husky": "^9.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "tsx": "^4.22.1",
+    "typescript": "^5.3.0"
   },
   "engines": {
     "node": ">=20.0.0"

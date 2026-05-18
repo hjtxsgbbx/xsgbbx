@@ -1,4 +1,4 @@
-import { ExecutionContext, ToolCall } from "../types/index.js";
+import type { ToolCall } from "../types/index.js";
 
 export type SandboxMode = "off" | "readonly" | "workspace" | "full";
 
@@ -11,32 +11,39 @@ export interface SandboxOptions {
 
 const DEFAULT_OPTIONS: SandboxOptions = {
   mode: "off",
-  timeoutMs: 120000,
+  timeoutMs: 120_000,
   maxOutputBytes: 1024 * 1024,
 };
 
-const BLOCKED_IN_READONLY = [
-  /rm\s/i, /del\s/i, /erase\s/i,
-  /mv\s/i, /move\s/i, /rename\s/i,
+const TIMEOUT_QUICK = 10_000;
+const TIMEOUT_BUILD = 300_000;
+const TIMEOUT_INSTALL = 180_000;
+const TIMEOUT_TEST = 300_000;
+
+const BLOCKED_IN_READONLY: RegExp[] = [
+  /\brm\s/i, /\bdel\s/i, /\berase\s/i,
+  /\bmv\s/i, /\bmove\s/i, /\brename\s/i,
   />\s*\S/i, />>\s*\S/i,
-  /tee\s/i, /dd\s/i,
-  /npm\s+install/i, /yarn\s+add/i, /pnpm\s+add/i,
-  /pip\s+install/i, /cargo\s+install/i, /go\s+get/i,
-  /chmod\s/i, /chown\s/i, /attrib\s/i,
-  /format\s/i, /mkfs/i, /diskpart/i,
+  /\btee\s/i, /\bdd\s/i,
+  /\bnpm\s+install/i, /\byarn\s+add/i, /\bpnpm\s+add/i,
+  /\bpip\s+install/i, /\bcargo\s+install/i, /\bgo\s+get/i,
+  /\bchmod\s/i, /\bchown\s/i, /\battrib\s/i,
+  /\bformat\s/i, /\bmkfs/i, /\bdiskpart/i,
 ];
 
-const BLOCKED_IN_WORKSPACE = [
-  /rm\s+-rf\s+\/[^a-z]/i,
-  /del\s+\/f\s+\/[A-Z]:\\/i,
-  /sudo\s/i, /su\s/i,
-  /shutdown\s/i, /reboot\s/i, /restart\s/i,
-  /docker\s/i, /systemctl\s/i, /service\s/i,
-  /mount\s/i, /umount\s/i,
-  /iptables\s/i, /netsh\s/i, /firewall/i,
-  /crontab\s/i, /schtasks\s/i, /at\s/i,
-  /adduser\s/i, /useradd\s/i, /usermod\s/i, /net\s+user/i,
+const BLOCKED_IN_WORKSPACE: RegExp[] = [
+  /\brm\s+-rf\s+\/[^a-z]/i,
+  /\bdel\s+\/f\s+\/[A-Z]:\\/i,
+  /\bsudo\s/i, /\bsu\s/i,
+  /\bshutdown\s/i, /\breboot\s/i, /\brestart\s/i,
+  /\bdocker\s/i, /\bsystemctl\s/i, /\bservice\s/i,
+  /\bmount\s/i, /\bumount\s/i,
+  /\biptables\s/i, /\bnetsh\s/i, /\bfirewall/i,
+  /\bcrontab\s/i, /\bschtasks\s/i, /\bat\s/i,
+  /\badduser\s/i, /\buseradd\s/i, /\busermod\s/i, /\bnet\s+user/i,
 ];
+
+const DESTRUCTIVE_READONLY_PATTERNS = BLOCKED_IN_READONLY.slice(0, -4);
 
 export class SandboxExecutor {
   private options: SandboxOptions;
@@ -61,26 +68,15 @@ export class SandboxExecutor {
   getTieredTimeout(command: string): number {
     const trimmed = command.trim().toLowerCase();
 
-    if (isQuickCommand(trimmed)) {
-      return 10000;
-    }
-
-    if (isBuildCommand(trimmed)) {
-      return 300000;
-    }
-
-    if (isInstallCommand(trimmed)) {
-      return 180000;
-    }
-
-    if (isTestCommand(trimmed)) {
-      return 300000;
-    }
+    if (isQuickCommand(trimmed)) return TIMEOUT_QUICK;
+    if (isBuildCommand(trimmed)) return TIMEOUT_BUILD;
+    if (isInstallCommand(trimmed)) return TIMEOUT_INSTALL;
+    if (isTestCommand(trimmed)) return TIMEOUT_TEST;
 
     return this.options.timeoutMs;
   }
 
-  validateCommand(command: string, toolCall: ToolCall): { allowed: boolean; reason?: string } {
+  validateCommand(command: string, _toolCall: ToolCall): { allowed: boolean; reason?: string } {
     if (this.options.mode === "off" || this.options.mode === "full") {
       return { allowed: true };
     }
@@ -88,37 +84,50 @@ export class SandboxExecutor {
     const trimmed = command.trim();
     if (!trimmed) return { allowed: true };
 
+    const normalized = normalizeCommand(trimmed);
+
     if (this.options.mode === "readonly") {
-      for (const pattern of BLOCKED_IN_READONLY) {
-        if (pattern.test(trimmed)) {
-          return {
-            allowed: false,
-            reason: `Read-only sandbox: blocked command matching "${pattern.source}"`,
-          };
-        }
-      }
+      return this.validateReadOnly(normalized);
     }
 
     if (this.options.mode === "workspace") {
-      for (const pattern of BLOCKED_IN_WORKSPACE) {
-        if (pattern.test(trimmed)) {
-          return {
-            allowed: false,
-            reason: `Workspace sandbox: blocked command matching "${pattern.source}"`,
-          };
-        }
-      }
+      return this.validateWorkspace(normalized, trimmed);
+    }
 
-      for (const pattern of BLOCKED_IN_READONLY.slice(0, -4)) {
-        if (pattern.test(trimmed)) {
-          if (this.options.workspaceDir) {
-            const includesWorkspace = trimmed.includes(this.options.workspaceDir);
-            if (!includesWorkspace) {
-              return {
-                allowed: false,
-                reason: `Workspace sandbox: destructive operation outside workspace`,
-              };
-            }
+    return { allowed: true };
+  }
+
+  private validateReadOnly(normalized: string): { allowed: boolean; reason?: string } {
+    for (const pattern of BLOCKED_IN_READONLY) {
+      if (pattern.test(normalized)) {
+        return {
+          allowed: false,
+          reason: `Read-only sandbox: blocked command matching "${pattern.source}"`,
+        };
+      }
+    }
+    return { allowed: true };
+  }
+
+  private validateWorkspace(normalized: string, original: string): { allowed: boolean; reason?: string } {
+    for (const pattern of BLOCKED_IN_WORKSPACE) {
+      if (pattern.test(normalized)) {
+        return {
+          allowed: false,
+          reason: `Workspace sandbox: blocked command matching "${pattern.source}"`,
+        };
+      }
+    }
+
+    for (const pattern of DESTRUCTIVE_READONLY_PATTERNS) {
+      if (pattern.test(normalized)) {
+        if (this.options.workspaceDir) {
+          const includesWorkspace = original.includes(this.options.workspaceDir);
+          if (!includesWorkspace) {
+            return {
+              allowed: false,
+              reason: `Workspace sandbox: destructive operation outside workspace`,
+            };
           }
         }
       }
@@ -130,22 +139,30 @@ export class SandboxExecutor {
   wrapCommand(command: string): string {
     if (this.options.mode === "off") return command;
 
-    let wrapped = command;
-
     if (this.options.timeoutMs > 0) {
+      const timeoutSec = Math.floor(this.options.timeoutMs / 1000);
       if (process.platform === "win32") {
-        wrapped = `powershell -Command "& { $job = Start-Job -ScriptBlock { ${wrapped} }; Wait-Job $job -Timeout ${Math.floor(this.options.timeoutMs / 1000)}; Stop-Job $job; Receive-Job $job; Remove-Job $job }"`;
+        const escaped = command.replace(/'/g, "''");
+        return `powershell -NoProfile -NonInteractive -Command "& { $job = Start-Job -ScriptBlock { ${escaped} }; Wait-Job $job -Timeout ${timeoutSec}; Stop-Job $job; Receive-Job $job; Remove-Job $job }"`;
       } else {
-        wrapped = `timeout ${Math.floor(this.options.timeoutMs / 1000)} ${wrapped}`;
+        return `timeout ${timeoutSec} -- ${command}`;
       }
     }
 
-    return wrapped;
+    return command;
   }
 
   getOptions(): SandboxOptions {
     return { ...this.options };
   }
+}
+
+function normalizeCommand(command: string): string {
+  return command
+    .replace(/''/g, "'")
+    .replace(/\\"/g, '"')
+    .replace(/\\$/g, "$")
+    .replace(/\s+/g, " ");
 }
 
 export const sandbox = new SandboxExecutor();

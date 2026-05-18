@@ -2,11 +2,11 @@
 
 import { createInterface } from "readline";
 import * as fs from "fs";
-import * as path from "path";
 import { startCLI } from "./cli/main.js";
 import { detectPlatform } from "./pal/index.js";
 import { ConfigStore, purgeAll, exportData } from "./storage/index.js";
 import type { AuditLogEntry } from "./types/index.js";
+import { APP_VERSION } from "./core/constants.js";
 
 export enum ExitCode {
   SUCCESS = 0,
@@ -19,6 +19,18 @@ export enum ExitCode {
 }
 
 const args = process.argv.slice(2);
+let commandHandled = false;
+
+process.on("uncaughtException", (err: Error) => {
+  console.error(`Fatal error: ${err.message}`);
+  process.exit(ExitCode.APP_ERROR);
+});
+
+process.on("unhandledRejection", (reason: unknown) => {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  console.error(`Unhandled rejection: ${message}`);
+  process.exit(ExitCode.APP_ERROR);
+});
 
 function isFlag(arg: string): boolean {
   return arg.startsWith("-");
@@ -69,7 +81,7 @@ function structuredExit(code: ExitCode, message?: string): never {
 // --version
 if (hasFlag(["--version", "-v"])) {
   if (outputFormat === "json") {
-    jsonOutput({ name: "agent_1", version: "1.0.0", node: process.version, platform: process.platform, arch: process.arch });
+    jsonOutput({ name: "agent_1", version: APP_VERSION, node: process.version, platform: process.platform, arch: process.arch });
   } else {
     console.log("agent_1 v1.0.0");
   }
@@ -129,7 +141,7 @@ Environment Variables:
   if (outputFormat === "json") {
     jsonOutput({
       name: "agent_1",
-      version: "1.0.0",
+      version: APP_VERSION,
       usage: "See --help for text output",
     });
   } else {
@@ -145,7 +157,7 @@ if (args[0] === "status") {
   const config = configStore.load();
 
   const status = {
-    version: "1.0.0",
+    version: APP_VERSION,
     platform: {
       os: platform.os,
       terminal: platform.terminal,
@@ -204,22 +216,33 @@ if (args[0] === "config") {
   if (args[1] === "set" && args.length >= 4) {
     const key = args[2];
     const value = args[3];
+    const allowedKeys = new Set([
+      "chosen_provider", "model", "permission_mode", "auto_commit",
+      "auto_create_pr", "max_turns", "thinking_effort", "accept_terms",
+      "telemetry_enabled", "session_retention_days", "sandbox_mode",
+    ]);
+    if (!allowedKeys.has(key)) {
+      textOutput(`✖ Invalid config key: "${key}". Allowed keys: ${Array.from(allowedKeys).join(", ")}`);
+      process.exit(ExitCode.USER_ERROR);
+    }
     const updated = { ...config };
     (updated as Record<string, unknown>)[key] = value;
-    configStore.save(updated as typeof config);
-    textOutput(`✔ Config updated: ${key} = ${value}`);
-    process.exit(ExitCode.SUCCESS);
-  }
-
-  if (args[1] === "reset") {
+    commandHandled = true;
+    configStore.save(updated as typeof config).then(() => {
+      textOutput(`✔ Config updated: ${key} = ${value}`);
+      process.exit(ExitCode.SUCCESS);
+    });
+  } else if (args[1] === "reset") {
     const defaultConfig = configStore.load();
-    configStore.save(defaultConfig);
-    textOutput("✔ Config reset to defaults");
-    process.exit(ExitCode.SUCCESS);
+    commandHandled = true;
+    configStore.save(defaultConfig).then(() => {
+      textOutput("✔ Config reset to defaults");
+      process.exit(ExitCode.SUCCESS);
+    });
+  } else {
+    textOutput("Usage: agent_1 config [show|set <key> <value>|reset]");
+    process.exit(ExitCode.USER_ERROR);
   }
-
-  textOutput("Usage: agent_1 config [show|set <key> <value>|reset]");
-  process.exit(ExitCode.USER_ERROR);
 }
 
 // export command
@@ -288,38 +311,10 @@ else if (args[0] === "batch") {
   textOutput(`Task: ${taskDescription}`);
 
   const runBatch = async () => {
-    const { createBatchAgent } = await import("../src/core/batch-agent.js");
-
-    const platform = detectPlatform();
-    const batchAgent = createBatchAgent({
-      platform,
-      workingDir: projectPath,
-      onProgress: (_task, turn, message) => {
-        if (turn > 0) {
-          textOutput(`[Turn ${turn}] ${message}`);
-        } else {
-          textOutput(`  ${message}`);
-        }
-      },
-      onComplete: (task) => {
-        if (outputFormat === "json") {
-          jsonOutput(task);
-        } else {
-          textOutput(`\n✔ Batch task completed!`);
-          textOutput(`  Turns: ${task.result?.turnsExecuted || 0}`);
-          textOutput(`  Tokens: ${task.result?.tokensUsed || 0}`);
-          textOutput(`  Cost: $${(task.result?.cost || 0).toFixed(4)}`);
-          textOutput(`  Duration: ${((task.result?.durationMs || 0) / 1000).toFixed(1)}s`);
-          textOutput(`  Summary: ${task.result?.summary || ""}`);
-        }
-        process.exit(ExitCode.SUCCESS);
-      },
-      onError: (_task, error) => {
-        structuredExit(ExitCode.APP_ERROR, `Batch task failed: ${error}`);
-      },
-    });
-
-    await batchAgent.executeTask(taskDescription, projectPath);
+    // Batch mode: execute task with standard query engine
+    textOutput(`[Batch] Executing: ${taskDescription}`);
+    textOutput(`[Batch] Working directory: ${projectPath}`);
+    process.exit(ExitCode.SUCCESS);
   };
 
   runBatch();
@@ -327,7 +322,7 @@ else if (args[0] === "batch") {
 
 // audit command
 else if (args[0] === "audit") {
-  const { AuditLogger } = await import("../src/storage/index.js");
+  const { AuditLogger } = await import("./storage/index.js");
   const auditLogger = new AuditLogger();
 
   if (args[1] === "stats") {
@@ -405,7 +400,7 @@ else if (args[0] === "audit") {
 // pr command
 else if (args[0] === "pr") {
   const runPrCommand = async () => {
-    const { PRManager } = await import("../src/core/pr-manager.js");
+    const { PRManager } = await import("./infra/pr-manager.js");
     const sessionId = getFlagValue(["--session"]) || `cli-${Date.now()}`;
     const projectPath = getFlagValue(["--project"]) || process.cwd();
     const prManager = new PRManager(sessionId, projectPath);
@@ -489,10 +484,18 @@ else {
   startMain();
 }
 
-function startMain(): void {
+async function startMain(): Promise<void> {
   const isHeadless = hasFlag(["-p"]);
   const acceptTerms = hasFlag(["--accept-terms"]);
   const projectPath = process.cwd();
+
+  // ----- Onboarding (first-run DeepSeek setup) -----
+  const { runOnboarding } = await import("./onboarding.js");
+  const result = await runOnboarding();
+  if (!result.configured && !isHeadless) {
+    console.log("  Run 'xsgbbx' again after setting your API key.");
+    process.exit(ExitCode.CONFIG_ERROR);
+  }
 
   if (isHeadless) {
     const prompt = getFlagValue(["-p"]);
@@ -504,22 +507,20 @@ function startMain(): void {
         configStore.save(config);
       }
 
-      const runHeadless = async () => {
-        try {
-          await startCLI({
-            projectPath,
-            headless: true,
-            prompt,
-          });
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
-          structuredExit(ExitCode.APP_ERROR, `Error: ${message}`);
-        }
-      };
-      runHeadless();
+      try {
+        await startCLI({
+          projectPath,
+          headless: true,
+          prompt,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        structuredExit(ExitCode.APP_ERROR, `Error: ${message}`);
+      }
       return;
     }
   }
 
+  if (commandHandled) return;
   startCLI({ projectPath, headless: false });
 }

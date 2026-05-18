@@ -1,52 +1,25 @@
 {
   "name": "agent_1-desktop",
   "version": "1.0.0",
-  "description": "agent_1 桌面端 - Electron GUI",
+  "description": "agent_1 Desktop - Electron 桌面端",
   "type": "module",
-  "main": "./dist/main/index.js",
+  "main": "../dist-desktop/desktop/main/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "start": "electron .",
-    "dev": "tsc -p tsconfig.json && electron .",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "build": "tsc -p tsconfig.json && node scripts/bundle-renderer.js",
+    "start": "electron ../dist-desktop/desktop/main/index.js",
+    "dev": "tsc -p tsconfig.json && node scripts/bundle-renderer.js && electron ../dist-desktop/desktop/main/index.js"
   },
   "dependencies": {
+    "electron": "^28.0.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "uuid": "^9.0.0"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/node": "^20.10.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@types/node": "^20.10.0",
-    "@types/uuid": "^9.0.0",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.0",
+    "esbuild": "^0.28.0",
     "typescript": "^5.3.0"
-  },
-  "build": {
-    "appId": "dev.agent1.desktop",
-    "productName": "agent_1",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "assets/**/*"
-    ],
-    "win": {
-      "target": ["nsis"],
-      "icon": "assets/icon.ico"
-    },
-    "mac": {
-      "target": ["dmg"],
-      "icon": "assets/icon.icns"
-    },
-    "linux": {
-      "target": ["AppImage"],
-      "icon": "assets/icon.png"
-    }
   },
   "license": "MIT"
 }

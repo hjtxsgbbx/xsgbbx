@@ -1,4 +1,5 @@
 import * as path from "path";
+import { debug } from "../observability/debug.js";
 
 export function resolveSafePath(
   filePath: string,
@@ -52,17 +53,20 @@ export function isInWorkspace(filePath: string, workspaceDir: string): boolean {
     const resolved = path.resolve(filePath);
     const workspace = path.resolve(workspaceDir);
     return resolved.startsWith(workspace);
-  } catch {
+  } catch (err) {
+    debug.warn("path-guard", "Path resolution failed, denying access", err);
     return false;
   }
 }
 
 export function sanitizeFilePath(filePath: string): string {
-  let sanitized = filePath
-    .replace(/[\x00-\x1F]/g, "")
+  const stripControlChars = (s: string): string =>
+    s.split("").filter((ch) => { const c = ch.charCodeAt(0); return c > 31 && c !== 127; }).join("");
+  let sanitized = stripControlChars(filePath)
     .replace(/[<>:"|?*]/g, "_");
 
   sanitized = path.normalize(sanitized);
+  sanitized = stripControlChars(sanitized);
 
   if (sanitized.length > 260) {
     const ext = path.extname(sanitized);

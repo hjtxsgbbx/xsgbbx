@@ -1,6 +1,8 @@
-import { Tool, ToolResult, JSONSchema, ExecutionContext } from "../types/index.js";
+import { type Tool, type ToolResult, type JSONSchema, type ExecutionContext } from "../types/index.js";
 import { MCPClient } from "./client.js";
-import { MCPToolDefinition, MCPServerConfig } from "./types.js";
+import { type MCPToolDefinition, type MCPServerConfig, type MCPResourceDefinition, type MCPPromptDefinition } from "./types.js";
+
+export type { MCPResourceDefinition, MCPPromptDefinition } from "./types.js";
 
 function mcpSchemaToJSONSchema(mcpSchema: MCPToolDefinition["inputSchema"]): JSONSchema {
   const properties: Record<string, JSONSchema> = {};
@@ -101,6 +103,79 @@ export class MCPManager {
   getConnectedServerNames(): string[] {
     return [...this.servers.keys()];
   }
+
+  getResources(serverName?: string): MCPResourceDefinition[] {
+    if (serverName) {
+      const entry = this.servers.get(serverName);
+      return entry ? entry.client.getResources() : [];
+    }
+    const all: MCPResourceDefinition[] = [];
+    for (const entry of this.servers.values()) {
+      all.push(...entry.client.getResources());
+    }
+    return all;
+  }
+
+  async readResource(uri: string, serverName?: string): Promise<{ contents: Array<{ uri: string; mimeType?: string; text?: string; blob?: string }> }> {
+    const client = serverName
+      ? this.servers.get(serverName)?.client
+      : this.findClientForResource(uri);
+    if (!client) {
+      throw new Error(`No MCP server found for resource: ${uri}`);
+    }
+    return client.readResource(uri);
+  }
+
+  getPrompts(serverName?: string): MCPPromptDefinition[] {
+    if (serverName) {
+      const entry = this.servers.get(serverName);
+      return entry ? entry.client.getPrompts() : [];
+    }
+    const all: MCPPromptDefinition[] = [];
+    for (const entry of this.servers.values()) {
+      all.push(...entry.client.getPrompts());
+    }
+    return all;
+  }
+
+  async getPrompt(name: string, args?: Record<string, string>, serverName?: string): Promise<{ description?: string; messages: Array<{ role: "user" | "assistant"; content: { type: "text" | "image" | "resource"; text?: string; data?: string; mimeType?: string } }> }> {
+    const client = serverName
+      ? this.servers.get(serverName)?.client
+      : this.findClientForPrompt(name);
+    if (!client) {
+      throw new Error(`No MCP server found for prompt: ${name}`);
+    }
+    return client.getPrompt(name, args);
+  }
+
+  private findClientForResource(uri: string): MCPClient | undefined {
+    for (const entry of this.servers.values()) {
+      const resources = entry.client.getResources();
+      if (resources.some((r) => r.uri === uri)) {
+        return entry.client;
+      }
+    }
+    return undefined;
+  }
+
+  private findClientForPrompt(name: string): MCPClient | undefined {
+    for (const entry of this.servers.values()) {
+      const prompts = entry.client.getPrompts();
+      if (prompts.some((p) => p.name === name)) {
+        return entry.client;
+      }
+    }
+    return undefined;
+  }
 }
 
 export const mcpManager = new MCPManager();
+
+export { MCPOAuthClient } from "./mcp-oauth.js";
+export type { MCPOAuthConfig, MCPTokenSet, MCPOAuthState } from "./mcp-oauth.js";
+
+export { InProcessTransport } from "./in-process-transport.js";
+export type {
+  InProcessServer,
+  InProcessTransportOptions,
+} from "./in-process-transport.js";

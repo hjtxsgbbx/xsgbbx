@@ -1,10 +1,84 @@
-export type MCPTransport = "stdio" | "http";
+export type MCPTransport = "stdio" | "http" | "sse";
 
 export interface MCPCapabilities {
   tools?: boolean;
   resources?: boolean;
   prompts?: boolean;
   logging?: boolean;
+  sampling?: {
+    tools?: boolean;
+    context?: boolean;
+  };
+  roots?: boolean;
+}
+
+export interface MCPModelPreferences {
+  hints?: Array<{
+    name?: string;
+  }>;
+  costPriority?: number;
+  intelligencePriority?: number;
+  speedPriority?: number;
+}
+
+export interface MCPSamplingMessage {
+  role: "user" | "assistant";
+  content: {
+    type: "text" | "image" | "audio";
+    text?: string;
+    data?: string;
+    mimeType?: string;
+  } | Array<{
+    type: "text" | "image" | "audio";
+    text?: string;
+    data?: string;
+    mimeType?: string;
+  }>;
+}
+
+export interface MCPSamplingToolDefinition {
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+}
+
+export interface MCPSamplingCreateMessageRequest {
+  jsonrpc: "2.0";
+  id: number;
+  method: "sampling/createMessage";
+  params: {
+    messages: MCPSamplingMessage[];
+    modelPreferences?: MCPModelPreferences;
+    systemPrompt?: string;
+    includeContext?: "none" | "thisServer" | "allServers";
+    temperature?: number;
+    maxTokens: number;
+    stopSequences?: string[];
+    tools?: MCPSamplingToolDefinition[];
+    toolChoice?: { mode: "auto" | "none" | "required" } | { mode: "specific"; name: string };
+  };
+}
+
+export interface MCPSamplingCreateMessageResponse {
+  jsonrpc: "2.0";
+  id: number;
+  result: {
+    role: "assistant";
+    content: {
+      type: "text" | "image" | "audio";
+      text?: string;
+      data?: string;
+      mimeType?: string;
+    } | Array<{
+      type: "text" | "tool_use";
+      text?: string;
+      id?: string;
+      name?: string;
+      input?: Record<string, unknown>;
+    }>;
+    model: string;
+    stopReason: "endTurn" | "toolUse" | "stopSequence" | "maxTokens";
+  };
 }
 
 export interface MCPInitializeRequest {
@@ -102,7 +176,24 @@ export interface MCPServerConfig {
   command?: string;
   args?: string[];
   url?: string;
+  headers?: Record<string, string>;
   enabled: boolean;
+  reconnect?: boolean;
+  reconnectMaxRetries?: number;
+  reconnectBaseDelayMs?: number;
+  healthCheckIntervalMs?: number;
+  allowedTools?: string[];
+  blockedTools?: string[];
+  requireApproval?: boolean;
+  maxResponseSize?: number;
+  requestTimeoutMs?: number;
+}
+
+export interface MCPToolPermission {
+  toolName: string;
+  allowed: boolean;
+  requireApproval: boolean;
+  maxCallsPerSession?: number;
 }
 
 export type MCPTaskStatus = "submitted" | "working" | "input_required" | "completed" | "failed" | "cancelled";
@@ -211,6 +302,102 @@ export interface MCPTasksResultResponse {
   result: MCPTaskResult;
 }
 
+export interface MCPResourceDefinition {
+  uri: string;
+  name: string;
+  description?: string;
+  mimeType?: string;
+}
+
+export interface MCPListResourcesRequest {
+  jsonrpc: "2.0";
+  id: number;
+  method: "resources/list";
+  params?: Record<string, unknown>;
+}
+
+export interface MCPListResourcesResponse {
+  jsonrpc: "2.0";
+  id: number;
+  result: {
+    resources: MCPResourceDefinition[];
+  };
+}
+
+export interface MCPReadResourceRequest {
+  jsonrpc: "2.0";
+  id: number;
+  method: "resources/read";
+  params: {
+    uri: string;
+  };
+}
+
+export interface MCPReadResourceResponse {
+  jsonrpc: "2.0";
+  id: number;
+  result: {
+    contents: Array<{
+      uri: string;
+      mimeType?: string;
+      text?: string;
+      blob?: string;
+    }>;
+  };
+}
+
+export interface MCPPromptDefinition {
+  name: string;
+  description?: string;
+  arguments?: Array<{
+    name: string;
+    description?: string;
+    required?: boolean;
+  }>;
+}
+
+export interface MCPListPromptsRequest {
+  jsonrpc: "2.0";
+  id: number;
+  method: "prompts/list";
+  params?: Record<string, unknown>;
+}
+
+export interface MCPListPromptsResponse {
+  jsonrpc: "2.0";
+  id: number;
+  result: {
+    prompts: MCPPromptDefinition[];
+  };
+}
+
+export interface MCPGetPromptRequest {
+  jsonrpc: "2.0";
+  id: number;
+  method: "prompts/get";
+  params: {
+    name: string;
+    arguments?: Record<string, string>;
+  };
+}
+
+export interface MCPGetPromptResponse {
+  jsonrpc: "2.0";
+  id: number;
+  result: {
+    description?: string;
+    messages: Array<{
+      role: "user" | "assistant";
+      content: {
+        type: "text" | "image" | "resource";
+        text?: string;
+        data?: string;
+        mimeType?: string;
+      };
+    }>;
+  };
+}
+
 export type MCPRequest =
   | MCPInitializeRequest
   | MCPListToolsRequest
@@ -219,7 +406,12 @@ export type MCPRequest =
   | MCPTasksGetRequest
   | MCPTasksCancelRequest
   | MCPTasksListRequest
-  | MCPTasksResultRequest;
+  | MCPTasksResultRequest
+  | MCPListResourcesRequest
+  | MCPReadResourceRequest
+  | MCPListPromptsRequest
+  | MCPGetPromptRequest
+  | MCPSamplingCreateMessageRequest;
 
 export type MCPResponse =
   | MCPInitializeResponse
@@ -230,4 +422,8 @@ export type MCPResponse =
   | MCPTasksCancelResponse
   | MCPTasksListResponse
   | MCPTasksResultResponse
+  | MCPListResourcesResponse
+  | MCPReadResourceResponse
+  | MCPListPromptsResponse
+  | MCPGetPromptResponse
   | MCPErrorResponse;

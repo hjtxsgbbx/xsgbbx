@@ -1,65 +1,65 @@
-### 📋 Description
+## Description
 
-<!-- 简要描述此 PR 的变更内容 -->
+## Summary of changes
+-
+-
 
-### 🔗 Related Issues
+## Type
+- [ ] feat: new feature
+- [ ] fix: bug fix
+- [ ] refactor: code restructuring (no behavior change)
+- [ ] perf: performance improvement
+- [ ] test: test additions or fixes
+- [ ] docs: documentation only
+- [ ] build: build system or CI changes
+- [ ] chore: maintenance tasks
 
-<!-- 关联的 Issue 编号，如: Closes #42 -->
+## Iteration Context
+- **Iteration ID**:
+- **Requirement ID(s)**:
+- **Task ID(s)**:
+- **Phase**: Requirements / Design / Development / Integration Test / Feedback / Review
 
-### 🎯 Type of Change
+## Testing
+- [ ] Unit tests added/updated and passing (coverage >= 80%)
+- [ ] Integration tests passing
+- [ ] TypeScript compiles (`tsc --noEmit`)
+- [ ] Lint passes (`eslint src/ --max-warnings 100`)
+- [ ] Regression checklist verified
 
-- [ ] `feat` — 新功能
-- [ ] `fix` — Bug 修复
-- [ ] `docs` — 文档更新
-- [ ] `style` — 代码格式
-- [ ] `refactor` — 代码重构
-- [ ] `test` — 测试
-- [ ] `chore` — 构建/工具
-- [ ] `security` — 安全修复
-- [ ] `perf` — 性能优化
+### New test coverage
+-
 
-### 📦 Scope
-
-- [ ] `core` — 核心引擎
-- [ ] `api` — API Provider
-- [ ] `mcp` — MCP 协议
-- [ ] `tools` — 工具系统
-- [ ] `security` — 安全模块
-- [ ] `ui` — 用户界面
-- [ ] `desktop` — Electron 桌面端
-- [ ] `web` — WebSocket 客户端
-- [ ] `ci` — CI/CD
-- [ ] `docs` — 文档
-
-### ✅ Pre-Merge Checklist
-
-- [ ] TypeScript 编译通过 (`npm run typecheck`)
-- [ ] 所有测试通过 (`npm test`)
-- [ ] 新功能有测试覆盖
-- [ ] 代码遵循 `.editorconfig`
-- [ ] 无遗留 `console.log` 或 `TODO`
-- [ ] 错误处理使用 `Result/Either` 模式
-- [ ] 安全敏感代码有路径遍历/注入防护
-- [ ] 公共 API 变更已更新类型导出
-- [ ] 破坏性变更已在 PR 描述中标注
-
-### 🧪 Test Coverage
-
-<!-- 描述新增或修改的测试 -->
+## Benchmark Impact
+- [ ] No performance regression
+- [ ] Performance improvement (describe: )
+- [ ] Performance regression (explain: )
 
 ```
-Test Suites: X passed
-Tests:       Y passed
+Benchmark results:
+-
 ```
 
-### 📊 Performance Impact
+## Code Review Checklist
+- [ ] Self-review completed
+- [ ] No new lint warnings introduced
+- [ ] Breaking changes documented
+- [ ] API changes reflected in type definitions
+- [ ] ADR created for architecture decisions (if applicable)
+- [ ] Relevant documentation updated in `docs/`
+- [ ] No hardcoded secrets or credentials
+- [ ] Error handling follows project patterns
+- [ ] No unnecessary dependencies introduced
+- [ ] Code follows existing naming conventions
 
-<!-- 如有性能影响，请提供对比数据 -->
+## Reviewer Requirements
+- [ ] At least 1 team member reviewed and approved
+- [ ] All CI checks passing
+- [ ] No unresolved review comments
 
-### 🔒 Security Review
+## Screenshots (if applicable)
 
-<!-- 安全相关变更请在此说明 -->
+## Related Issues
+Closes #
 
-### 📝 Additional Notes
-
-<!-- 任何额外的说明 -->
+## Deployment Notes (if applicable)

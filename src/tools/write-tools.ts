@@ -1,11 +1,12 @@
 import * as fs from "fs";
 import * as path from "path";
-import { Tool, ExecutionContext, ToolResult } from "../types/index.js";
-import { shellExec, commandExists, validateShellCommand } from "../pal/index.js";
+import { type Tool, type ExecutionContext, type ToolResult } from "../types/index.js";
+import { shellExec, validateShellCommand } from "../pal/index.js";
 import { createReadOnlyTools } from "./read-tools.js";
 import { resolveSafePath } from "../security/path-guard.js";
 import { sandbox } from "../security/sandbox.js";
 import { applyEdit } from "./diff-edit.js";
+import { extractStringParam, extractRequiredStringParam } from "../api/utils.js";
 
 export class EditFileTool implements Tool {
   name = "edit_file";
@@ -173,8 +174,8 @@ export class ShellCommandTool implements Tool {
     params: Record<string, unknown>,
     context: ExecutionContext
   ): Promise<ToolResult> {
-    const command = params.command as string;
-    const cwd = params.cwd as string | undefined;
+    const command = extractRequiredStringParam(params, "command");
+    const cwd = extractStringParam(params, "cwd");
 
     if (!command || typeof command !== "string" || command.trim().length === 0) {
       return {
@@ -320,7 +321,7 @@ export class GitPushTool implements Tool {
     params: Record<string, unknown>,
     context: ExecutionContext
   ): Promise<ToolResult> {
-    const repoPath = (params.path as string) || process.cwd();
+    const repoPath = extractStringParam(params, "path", process.cwd());
 
     try {
       const pushResult = await shellExec(

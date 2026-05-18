@@ -1,0 +1,212 @@
+{
+  "generatedAt": "2026-05-17T02:31:38.841Z",
+  "architectureLayers": {
+    "presentation": {
+      "modules": [
+        "src/cli/",
+        "desktop/renderer/",
+        "web/"
+      ],
+      "description": "User interface layer"
+    },
+    "orchestration": {
+      "modules": [
+        "src/engine/",
+        "src/planning/"
+      ],
+      "description": "Agent orchestration and task planning"
+    },
+    "intelligence": {
+      "modules": [
+        "src/intelligence/",
+        "src/compaction/"
+      ],
+      "description": "NLP, context, and knowledge"
+    },
+    "tools": {
+      "modules": [
+        "src/tools/",
+        "src/pal/"
+      ],
+      "description": "File operations and platform abstraction"
+    },
+    "governance": {
+      "modules": [
+        "src/permissions/",
+        "src/security/",
+        "src/resilience/"
+      ],
+      "description": "Security, permissions, and error handling"
+    },
+    "observability": {
+      "modules": [
+        "src/observability/",
+        "src/storage/"
+      ],
+      "description": "Monitoring, tracing, and persistence"
+    },
+    "infrastructure": {
+      "modules": [
+        "src/infra/",
+        "src/mcp/",
+        "src/api/"
+      ],
+      "description": "External integrations"
+    },
+    "foundation": {
+      "modules": [
+        "src/types/",
+        "src/common/",
+        "src/core/"
+      ],
+      "description": "Shared types and utilities"
+    }
+  },
+  "moduleSize": {
+    "src/engine": 7216,
+    "src/intelligence": 3275,
+    "src/observability": 2421,
+    "src/cli": 2017,
+    "src/tools": 1765,
+    "src/planning": 1650,
+    "src/permissions": 1484,
+    "src/api": 1245,
+    "src/mcp": 1189,
+    "src/resilience": 1102,
+    "src/storage": 886,
+    "src/infra": 844,
+    "src/benchmark": 716,
+    "src/pal": 648,
+    "src/index.ts": 495,
+    "src/security": 397,
+    "src/core": 371,
+    "src/types": 277,
+    "src/compaction": 237,
+    "src/common": 69
+  },
+  "testSize": {
+    "test/benchmark": 277,
+    "test/e2e": 222,
+    "test/functional": 1522,
+    "test/integration": 190,
+    "test/unit": 11414
+  },
+  "dependencyGraph": {
+    "src/api": [
+      "src/core",
+      "src/observability",
+      "src/storage",
+      "src/types"
+    ],
+    "src/benchmark": [],
+    "src/cli": [
+      "src/api",
+      "src/engine",
+      "src/intelligence",
+      "src/pal",
+      "src/storage",
+      "src/types"
+    ],
+    "src/common": [],
+    "src/compaction": [
+      "src/observability",
+      "src/types"
+    ],
+    "src/core": [],
+    "src/engine": [
+      "src/api",
+      "src/common",
+      "src/compaction",
+      "src/core",
+      "src/intelligence",
+      "src/observability",
+      "src/pal",
+      "src/permissions",
+      "src/resilience",
+      "src/security",
+      "src/storage",
+      "src/tools",
+      "src/types"
+    ],
+    "src/infra": [
+      "src/observability",
+      "src/storage",
+      "src/types"
+    ],
+    "src/intelligence": [
+      "src/api",
+      "src/compaction",
+      "src/observability",
+      "src/pal",
+      "src/planning",
+      "src/resilience",
+      "src/types"
+    ],
+    "src/mcp": [
+      "src/core",
+      "src/observability",
+      "src/types"
+    ],
+    "src/observability": [
+      "src/core",
+      "src/pal",
+      "src/types"
+    ],
+    "src/pal": [
+      "src/types"
+    ],
+    "src/permissions": [
+      "src/observability",
+      "src/types"
+    ],
+    "src/planning": [
+      "src/api",
+      "src/core",
+      "src/engine",
+      "src/intelligence",
+      "src/observability",
+      "src/resilience",
+      "src/storage",
+      "src/tools",
+      "src/types"
+    ],
+    "src/resilience": [
+      "src/api",
+      "src/observability",
+      "src/pal",
+      "src/types"
+    ],
+    "src/security": [
+      "src/observability",
+      "src/types"
+    ],
+    "src/storage": [
+      "src/core",
+      "src/observability",
+      "src/pal",
+      "src/types"
+    ],
+    "src/tools": [
+      "src/api",
+      "src/engine",
+      "src/observability",
+      "src/pal",
+      "src/permissions",
+      "src/security",
+      "src/storage",
+      "src/types"
+    ],
+    "src/types": [],
+    "src/index.ts": [
+      "src/cli",
+      "src/core",
+      "src/pal",
+      "src/storage",
+      "src/types"
+    ]
+  },
+  "circularDependencies": [
+    "src/engine <-> src/tools",
+    "src/intelligence <-> src/planning"
+  ]
+}

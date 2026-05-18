@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
-import { Message, ToolCall } from "../../types/index.js";
+import { type Message, type ToolCall } from "../../types/index.js";
 
 interface MessageListProps {
   messages: Message[];
@@ -50,8 +50,8 @@ const RenderMarkdown: React.FC<{ content: string }> = ({ content }) => {
           bold={seg.bold}
           italic={seg.italic}
           dimColor={seg.dim}
-          color={seg.color as any}
-          backgroundColor={seg.bgColor as any}
+          color={seg.color}
+          backgroundColor={seg.bgColor}
         >
           {seg.text}
         </Text>
@@ -60,13 +60,15 @@ const RenderMarkdown: React.FC<{ content: string }> = ({ content }) => {
   );
 };
 
+type InkColor = "black" | "red" | "green" | "yellow" | "blue" | "magenta" | "cyan" | "white" | "gray" | "grey" | "blackBright" | "redBright" | "greenBright" | "yellowBright" | "blueBright" | "magentaBright" | "cyanBright" | "whiteBright";
+
 interface MarkdownSegment {
   text: string;
   bold?: boolean;
   italic?: boolean;
   dim?: boolean;
-  color?: string;
-  bgColor?: string;
+  color?: InkColor;
+  bgColor?: InkColor;
 }
 
 function parseMarkdown(content: string): MarkdownSegment[] {
@@ -116,7 +118,7 @@ function parseInlineMarkdown(line: string): MarkdownSegment[] {
   }
 
   const segments: MarkdownSegment[] = [];
-  let remaining = line;
+  const _remaining = line;
   const pattern = /(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(`([^`]+)`)/g;
   let lastIndex = 0;
   let match;

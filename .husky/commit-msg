@@ -1,23 +1,32 @@
 #!/usr/bin/env bash
-# agent_1 Commit Message Hook
-# 确保提交信息遵循 Conventional Commits 规范
+# agent_1 Commit Message Validator
+# Enforces Conventional Commits format: type(scope): subject
 
 COMMIT_MSG=$(cat "$1")
 
-PATTERN="^(feat|fix|docs|style|refactor|test|chore|perf|security)(\(.+\))?: .+"
+PATTERN="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_-]+\))?: .{1,72}$"
 
-if ! echo "$COMMIT_MSG" | head -1 | grep -qE "$PATTERN"; then
+if ! echo "$COMMIT_MSG" | grep -qE "$PATTERN"; then
   echo ""
-  echo "  ✗ Invalid commit message format."
-  echo "  Expected: <type>(<scope>): <subject>"
+  echo "================================================"
+  echo "  INVALID COMMIT MESSAGE FORMAT"
+  echo "================================================"
   echo ""
-  echo "  Valid types: feat | fix | docs | style | refactor | test | chore | perf | security"
+  echo "  Commit message must follow Conventional Commits:"
+  echo "    type(scope): subject"
+  echo ""
+  echo "  Types: feat | fix | docs | style | refactor | perf | test | build | ci | chore | revert"
+  echo "  Scope:  optional, e.g. (core), (api), (desktop)"
+  echo "  Subject: imperative, lowercase, <=72 chars, no period"
+  echo ""
   echo "  Examples:"
-  echo "    feat(mcp): add MCP Tasks Protocol support"
-  echo "    fix(circuit-breaker): resolve state transition race"
-  echo "    docs(readme): add installation guide"
+  echo "    feat(core): add streaming response support"
+  echo "    fix(desktop): resolve IPC bridge type mismatch"
+  echo "    chore(deps): update typescript to v5.4"
+  echo ""
+  echo "  Your message: \"$COMMIT_MSG\""
   echo ""
   exit 1
 fi
 
-echo "  ✓ Commit message format OK"
+exit 0

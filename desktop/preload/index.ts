@@ -1,59 +1,74 @@
 import { contextBridge, ipcRenderer } from "electron";
 
-export interface ElectronAPI {
-  initSession: (projectPath: string) => Promise<{ success: boolean; data?: unknown; error?: string }>;
-  sendQuery: (input: { text: string; timestamp: string; interrupt?: boolean }) => Promise<{ success: boolean; data?: unknown; error?: string }>;
-  abortQuery: () => Promise<{ success: boolean }>;
-  getSession: () => Promise<{ success: boolean; data?: unknown }>;
-  getPlatform: () => Promise<{ success: boolean; data?: unknown }>;
-  getConfig: () => Promise<{ success: boolean; data?: unknown }>;
-  updateConfig: (updates: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
-  openProjectDialog: () => Promise<{ success: boolean; data?: string; error?: string }>;
-  saveFileDialog: (options: { defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => Promise<{ success: boolean; data?: string; error?: string }>;
-  getVersion: () => Promise<string>;
-  onStateChange: (callback: (data: { state: string; data?: unknown }) => void) => void;
-  onError: (callback: (message: string) => void) => void;
-  onMenuEvent: (event: string, callback: () => void) => void;
-  removeAllListeners: (channel: string) => void;
-}
+const ALLOWED_CHANNELS = new Set([
+  "bridge:init-session",
+  "bridge:query",
+  "bridge:abort",
+  "bridge:get-session",
+  "bridge:get-config",
+  "bridge:update-config",
+  "bridge:write-file",
+  "bridge:read-file",
+  "bridge:list-files",
+  "bridge:export-session",
+  "bridge:delete-session",
+  "bridge:get-platform",
+  "dialog:open-file",
+  "dialog:open-project",
+  "dialog:save-file",
+  "app:get-version",
+  "menu:open-project",
+  "menu:export-session",
+  "permission-required",
+  "permission-response",
+  "state-change",
+  "streaming",
+  "tool-executing",
+  "tool-result",
+  "cost-update",
+  "error",
+  "feedback:submit",
+]);
 
-const electronAPI: ElectronAPI = {
-  initSession: (projectPath: string) =>
-    ipcRenderer.invoke("bridge:init-session", projectPath),
+const ipcListeners = new Map<string, Array<(event: Electron.IpcRendererEvent, ...args: unknown[]) => void>>();
 
-  sendQuery: (input) => ipcRenderer.invoke("bridge:query", input),
-
-  abortQuery: () => ipcRenderer.invoke("bridge:abort"),
-
-  getSession: () => ipcRenderer.invoke("bridge:get-session"),
-
-  getPlatform: () => ipcRenderer.invoke("bridge:get-platform"),
-
-  getConfig: () => ipcRenderer.invoke("bridge:get-config"),
-
-  updateConfig: (updates) => ipcRenderer.invoke("bridge:update-config", updates),
-
-  openProjectDialog: () => ipcRenderer.invoke("dialog:open-project"),
-
-  saveFileDialog: (options) => ipcRenderer.invoke("dialog:save-file", options),
-
-  getVersion: () => ipcRenderer.invoke("app:get-version"),
-
-  onStateChange: (callback) => {
-    ipcRenderer.on("bridge:state-change", (_event, data) => callback(data));
-  },
-
-  onError: (callback) => {
-    ipcRenderer.on("bridge:error", (_event, message) => callback(message));
-  },
-
-  onMenuEvent: (event: string, callback: () => void) => {
-    ipcRenderer.on(`menu:${event}`, () => callback());
-  },
-
-  removeAllListeners: (channel: string) => {
-    ipcRenderer.removeAllListeners(channel);
-  },
+const safeOn = (channel: string, callback: (...args: unknown[]) => void): void => {
+  if (!ALLOWED_CHANNELS.has(channel)) return;
+  const wrappedCallback = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => callback(...args);
+  const channelListeners = ipcListeners.get(channel) || [];
+  channelListeners.push(wrappedCallback);
+  ipcListeners.set(channel, channelListeners);
+  ipcRenderer.on(channel, wrappedCallback);
 };
 
-contextBridge.exposeInMainWorld("electronAPI", electronAPI);
+const safeRemoveListener = (channel: string): void => {
+  const channelListeners = ipcListeners.get(channel);
+  if (channelListeners) {
+    for (const listener of channelListeners) {
+      ipcRenderer.removeListener(channel, listener);
+    }
+    ipcListeners.delete(channel);
+  }
+};
+
+contextBridge.exposeInMainWorld("electronAPI", {
+  invoke: (channel: string, ...args: unknown[]) => {
+    if (!ALLOWED_CHANNELS.has(channel)) return Promise.reject(new Error(`Channel not allowed: ${channel}`));
+    return ipcRenderer.invoke(channel, ...args);
+  },
+  send: (channel: string, ...args: unknown[]) => {
+    if (!ALLOWED_CHANNELS.has(channel)) return;
+    ipcRenderer.send(channel, ...args);
+  },
+
+  on: safeOn,
+
+  removeListener: safeRemoveListener,
+
+  removeAllListeners: (): void => {
+    for (const [channel] of ipcListeners) {
+      safeRemoveListener(channel);
+    }
+    ipcListeners.clear();
+  },
+});

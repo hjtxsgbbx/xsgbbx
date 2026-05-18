@@ -3,8 +3,8 @@
     "target": "ES2022",
     "module": "Node16",
     "lib": ["ES2022"],
-    "outDir": "./dist",
-    "rootDir": ".",
+    "outDir": "../dist-web",
+    "rootDir": "..",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -14,6 +14,6 @@
     "sourceMap": true,
     "moduleResolution": "node16"
   },
-  "include": ["./**/*"],
-  "exclude": ["node_modules", "dist", "client"]
+  "include": ["./server.ts", "../src/**/*.ts"],
+  "exclude": ["node_modules", "client", "../src/index.ts", "../src/cli/main.tsx"]
 }

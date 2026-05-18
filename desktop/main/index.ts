@@ -19,7 +19,7 @@ function createMainWindow(): BrowserWindow {
     minHeight: 600,
     title: "agent_1",
     icon: join(__dirname, "..", "..", "assets", "icon.png"),
-    backgroundColor: nativeTheme.shouldUseDarkColors ? "#1a1a2e" : "#ffffff",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#080c16" : "#ffffff",
     webPreferences: {
       preload: join(__dirname, "..", "preload", "index.js"),
       contextIsolation: true,

@@ -1,99 +1,83 @@
 import React from "react";
 
 interface StatusBarProps {
-  provider: string;
+  sessionId: string | null;
   projectPath: string;
-  lastSent: string;
-  modelName: string;
-  tokenUsage: { input: number; output: number; total: number; limit: number } | null;
-  onToggleFileTree: () => void;
+  mode: string;
+  tokens: number;
+  tps: number;
+  model: string;
+  cost: number;
+  thinkingState: string;
+  onFeedback: () => void;
 }
 
 export default function StatusBar({
-  provider,
+  sessionId,
   projectPath,
-  lastSent,
-  modelName,
-  tokenUsage,
-  onToggleFileTree,
+  mode,
+  tokens,
+  tps,
+  model,
+  cost,
+  thinkingState,
+  onFeedback,
 }: StatusBarProps) {
-  const timeSince =
-    lastSent && lastSent.length > 0
-      ? Math.round((Date.now() - new Date(lastSent).getTime()) / 1000) + "s 前"
-      : "--";
-
   return React.createElement(
-    "div",
-    {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        padding: "4px 12px",
-        fontSize: 11,
-        fontFamily: "var(--font-mono)",
-        background: "var(--bg-primary)",
-        borderTop: "1px solid var(--border-color)",
-        gap: 16,
-        color: "var(--text-secondary)",
-        minHeight: 28,
-      },
-    },
+    "footer",
+    { className: "statusbar", role: "contentinfo", "aria-label": "Status bar" },
     React.createElement(
-      "span",
-      {
-        onClick: onToggleFileTree,
-        style: {
-          cursor: "pointer",
-          color: "var(--accent-cyan)",
-          fontWeight: 600,
-        },
-      },
-      "☰"
-    ),
-    projectPath &&
+      "div",
+      { className: "statusbar-left" },
       React.createElement(
         "span",
-        { style: { display: "flex", alignItems: "center", gap: 4 } },
-        "📁",
+        { className: "statusbar-mode" + (mode ? " " + mode : " default"), "aria-label": "Current mode: " + (mode || "default") },
+        "Mode: ",
+        React.createElement("span", null, mode || "default")
+      ),
+      React.createElement(
+        "span",
+        { className: "statusbar-agent", "aria-label": "Agent state: " + (thinkingState || "idle") },
+        React.createElement("span", {
+          className: "statusbar-agent-dot " + (thinkingState || "idle"),
+          "aria-hidden": "true",
+        }),
+        "Agent: ",
+        thinkingState || "idle"
+      ),
+      React.createElement("span", { "aria-label": "Current model" }, "Model: ", model),
+      sessionId &&
         React.createElement(
           "span",
-          {
-            style: {
-              maxWidth: 200,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            },
-          },
-          projectPath.split(/[/\\]/).pop() || projectPath
+          { style: { color: "var(--text-muted)" }, "aria-label": "Session ID" },
+          "Session: ",
+          sessionId.slice(0, 8),
+          "..."
         )
-      ),
-    React.createElement(
-      "span",
-      { style: { display: "flex", alignItems: "center", gap: 4 } },
-      "📡",
-      "发送至",
-      React.createElement(
-        "span",
-        { style: { color: "var(--accent-cyan)", fontWeight: 600 } },
-        provider === "anthropic" ? "Anthropic" : "OpenAI"
-      ),
-      "|",
-      React.createElement("span", null, `上次: ${timeSince}`)
     ),
-    modelName &&
-      React.createElement("span", null, "🤖 " + modelName),
-    tokenUsage &&
-      React.createElement(
-        "span",
-        { style: { color: "var(--accent-yellow)" } },
-        `Tok: ${tokenUsage.total}/${tokenUsage.limit}`
-      ),
-    React.createElement("div", { style: { flex: 1 } }),
     React.createElement(
-      "span",
-      { style: { color: "var(--accent-green)" } },
-      "agent_1 v1.0.0"
+      "div",
+      { className: "statusbar-right" },
+      React.createElement("span", { "aria-label": "Tokens used" }, "Tokens: ", tokens.toLocaleString()),
+      React.createElement("span", { "aria-label": "Tokens per second" }, "TPS: ", tps.toFixed(1)),
+      cost > 0 &&
+        React.createElement("span", { "aria-label": "Total cost" }, "Cost: $", cost.toFixed(4)),
+      projectPath &&
+        React.createElement(
+          "span",
+          { style: { color: "var(--text-muted)" }, "aria-label": "Project: " + projectPath.split(/[/\\]/).pop() },
+          projectPath.split(/[/\\]/).pop()?.slice(0, 20) || ""
+        ),
+      React.createElement(
+        "button",
+        {
+          className: "feedback-btn",
+          onClick: onFeedback,
+          "aria-label": "Send feedback",
+          tabIndex: 0,
+        },
+        "Feedback"
+      )
     )
   );
 }

@@ -1,9 +1,14 @@
-import { Menu, BrowserWindow, app, shell } from "electron";
+import { Menu, BrowserWindow, app, shell, dialog } from "electron";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export function buildAppMenu() {
   const isMac = process.platform === "darwin";
 
-  const template: Electron.MenuItemConstructorOptions[] = [
+  const template: Array<Record<string, unknown>> = [
     ...(isMac
       ? [
           {
@@ -120,5 +125,3 @@ export function buildAppMenu() {
     getMenu: () => menu,
   };
 }
-
-import { dialog } from "electron";

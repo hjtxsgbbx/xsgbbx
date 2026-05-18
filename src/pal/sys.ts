@@ -1,9 +1,13 @@
 import * as os from "os";
 import * as path from "path";
 import { execSync } from "child_process";
-import { OS, Terminal, PlatformInfo } from "../types/index.js";
+import { type OS, type Terminal, type PlatformInfo } from "../types/index.js";
+
+let cachedPlatform: PlatformInfo | null = null;
 
 export function detectPlatform(): PlatformInfo {
+  if (cachedPlatform) return cachedPlatform;
+
   const platform = os.platform();
   let osType: OS;
   if (platform === "win32") {
@@ -17,7 +21,7 @@ export function detectPlatform(): PlatformInfo {
   const terminal = detectTerminal();
   const shell = detectShell(osType);
 
-  return {
+  cachedPlatform = {
     os: osType,
     terminal,
     shell,
@@ -27,6 +31,8 @@ export function detectPlatform(): PlatformInfo {
     nodeVersion: process.version,
     arch: os.arch(),
   };
+
+  return cachedPlatform;
 }
 
 function detectTerminal(): Terminal {
@@ -99,7 +105,11 @@ function getTempDir(osType: OS): string {
   return process.env.TMPDIR || "/tmp";
 }
 
+let cachedAgentDir: string | null = null;
+
 export function getAgentDir(): string {
+  if (cachedAgentDir) return cachedAgentDir;
   const platform = detectPlatform();
-  return path.join(platform.homeDir, ".agent_1");
+  cachedAgentDir = path.join(platform.homeDir, ".agent_1");
+  return cachedAgentDir;
 }

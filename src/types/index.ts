@@ -66,17 +66,51 @@ export interface QueryResult {
 
 export interface QueryEngine {
   query(input: UserInput, context: SessionContext): Promise<QueryResult>;
+  abort(): void;
 }
+
+// ---------------------------------------------------------------------------
+// Tool System — Extended with Claude Code's buildTool() pattern
+// ---------------------------------------------------------------------------
 
 export interface Tool {
   name: string;
   description: string;
   parameters: JSONSchema;
+  /** @deprecated Use isReadOnly() instead */
   readonly: boolean;
   execute(
     params: Record<string, unknown>,
     context: ExecutionContext
   ): Promise<ToolResult>;
+
+  // --- Extended methods (Claude Code parity) ---
+
+  /** Whether this tool is read-only. Read-only tools can run concurrently. */
+  isReadOnly?(): boolean;
+
+  /** Whether this tool is safe to run concurrently with other tools.
+   *  Defaults to isReadOnly(). Only true if the tool has no side-effects
+   *  and doesn't depend on the state of other concurrent operations. */
+  isConcurrencySafe?(): boolean;
+
+  /** Whether this tool is currently enabled. Can be used to gate feature flags. */
+  isEnabled?(): boolean;
+
+  /** Validate input before execution. Return { result: true } or { result: false, message } */
+  validateInput?(params: Record<string, unknown>, context: ExecutionContext): Promise<{ result: boolean; message?: string }>;
+
+  /** Get the path this tool operates on (for permission checks) */
+  getPath?(params: Record<string, unknown>): string;
+
+  /** Render a tool result for display */
+  renderResult?(result: ToolResult): string;
+
+  /** Render a tool error for display */
+  renderError?(error: string): string;
+
+  /** Maximum characters in the tool result before truncation */
+  maxResultSizeChars?: number;
 }
 
 export interface ExecutionContext {
@@ -112,7 +146,7 @@ export interface PermissionDecision {
   confirmationRequired?: boolean;
 }
 
-export type PermissionMode = "default" | "plan";
+export type PermissionMode = "default" | "plan" | "defaultDeny" | "autoApprove" | "sandbox";
 
 export type ClientType = "cli" | "desktop" | "web";
 
@@ -124,6 +158,8 @@ export interface Message {
   timestamp: string;
   critical: boolean;
   tool_id?: string;
+  /** DeepSeek V4 requires reasoning_content round-tripped in all subsequent requests */
+  reasoning_content?: string;
 }
 
 export interface Session {
@@ -162,6 +198,13 @@ export interface UIConfig {
   compact_mode: boolean;
 }
 
+export interface ProviderConfig {
+  provider: string;
+  base_url: string;
+  api_key: string;
+  models: string[];
+}
+
 export interface Config {
   version: number;
   permission_mode: PermissionMode;
@@ -185,6 +228,18 @@ export interface Config {
   thinking_budget_tokens?: number;
   thinking_effort?: "low" | "medium" | "high";
   response_format?: { type: "json_object" };
+  provider_configs: Record<string, ProviderConfig>;
+  path_permissions?: PathPermission[];
+  budget_max_cost_usd?: number;
+  budget_max_tokens?: number;
+  budget_warning_threshold?: number;
+}
+
+export interface PathPermission {
+  pattern: string;
+  allowRead: boolean;
+  allowWrite: boolean;
+  allowExecute: boolean;
 }
 
 export interface MCPConfigItem {
@@ -223,9 +278,17 @@ export interface AgentBridge {
 }
 
 export type WSMessage =
-  | { type: "query"; payload: UserInput }
-  | { type: "result"; payload: QueryResult }
-  | { type: "error"; code: number; message: string };
+  | { type: "query"; payload: UserInput; version?: string }
+  | { type: "result"; payload: QueryResult; version?: string }
+  | { type: "error"; code: number; message: string; version?: string }
+  | { type: "init"; version?: string; payload?: { sessionId?: string; share?: boolean } }
+  | { type: "state"; version?: string; payload: { state: string; data?: unknown } }
+  | { type: "streaming"; version?: string; payload: { chunk: string } }
+  | { type: "tool_executing"; version?: string; payload: { toolName: string; args: Record<string, unknown> } }
+  | { type: "tool_result"; version?: string; payload: { toolName: string; result: unknown } }
+  | { type: "cost_update"; version?: string; payload: unknown }
+  | { type: "ping"; version?: string }
+  | { type: "pong"; version?: string; payload?: { timestamp: number; sessionId: string | null } };
 
 export type HealStrategy =
   | "RETRY"
@@ -284,4 +347,26 @@ export interface CommandAdapterResult {
   args: string[];
   safe: boolean;
   subCommandCount: number;
+}
+
+export interface IDialogueStateMachine {
+  processInput(input: UserInput): DialogueTurnResult;
+  getCurrentState(): string;
+  getCurrentTask(): TaskContextInfo | null;
+  getConversationSummary(): string;
+  reset(): void;
+}
+
+export interface DialogueTurnResult {
+  turnId: number;
+  intent: { type: string; confidence: number };
+  state: string;
+}
+
+export interface TaskContextInfo {
+  taskId: string;
+  description: string;
+  state: string;
+  createdAt: string;
+  updatedAt: string;
 }

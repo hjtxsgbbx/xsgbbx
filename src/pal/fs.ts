@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { PlatformInfo } from "../types/index.js";
+import { type PlatformInfo } from "../types/index.js";
 
 export function ensureDir(dirPath: string): void {
   if (!fs.existsSync(dirPath)) {

@@ -21,7 +21,7 @@ export const InputLine: React.FC<InputLineProps> = ({
         value={value}
         onChange={onChange}
         onSubmit={onSubmit}
-        placeholder="输入你的需求..."
+        placeholder="Enter your request..."
       />
     </Box>
   );

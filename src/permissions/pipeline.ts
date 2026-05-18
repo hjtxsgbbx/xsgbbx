@@ -1,14 +1,19 @@
 import {
-  ToolCall,
-  PermissionDecision,
-  PermissionLayer,
-  PermissionMode,
-  PlatformInfo,
-  ExecutionContext,
+  type ToolCall,
+  type PermissionDecision,
+  type PermissionMode,
+  type PlatformInfo,
+  type ExecutionContext,
 } from "../types/index.js";
-import { AIGuard } from "../core/ai-guard.js";
-
-const CONFIDENCE_THRESHOLD = 0.7;
+import { AIGuard } from "./ai-guard.js";
+import {
+  BUILTIN_RULES,
+  READONLY_TOOLS,
+  lookupCache,
+  addToCache,
+  clearCache as clearDecisionCache,
+  matchRuleTier,
+} from "./rules.js";
 
 export type PermissionRuleType = "deny" | "ask" | "allow";
 
@@ -19,228 +24,6 @@ export interface PermissionRule {
   description: string;
   toolNames?: string[];
   platform?: "windows" | "unix" | "all";
-}
-
-const BUILTIN_RULES: PermissionRule[] = [
-  {
-    id: "deny-rm-root",
-    pattern: "rm\\s+-rf\\s+/",
-    type: "deny",
-    description: "Recursive delete from root directory",
-    platform: "unix",
-  },
-  {
-    id: "deny-format-windows",
-    pattern: "format\\s+[A-Z]:",
-    type: "deny",
-    description: "Format drive",
-    platform: "windows",
-  },
-  {
-    id: "deny-diskpart",
-    pattern: "diskpart",
-    type: "deny",
-    description: "Windows disk partition tool",
-    platform: "windows",
-  },
-  {
-    id: "deny-dd-dev",
-    pattern: ">\\s*/dev/sd[a-z]",
-    type: "deny",
-    description: "Write to block device",
-    platform: "unix",
-  },
-  {
-    id: "deny-mkfs",
-    pattern: "mkfs\\.",
-    type: "deny",
-    description: "Filesystem creation",
-    platform: "unix",
-  },
-  {
-    id: "deny-fork-bomb",
-    pattern: ":\\(\\)\\s*\\{",
-    type: "deny",
-    description: "Fork bomb pattern",
-  },
-  {
-    id: "deny-del-windows",
-    pattern: "del\\s+/f\\s+/[A-Z]:\\\\windows",
-    type: "deny",
-    description: "Force delete Windows directory",
-    platform: "windows",
-  },
-  {
-    id: "ask-chmod-777",
-    pattern: "chmod\\s+777",
-    type: "ask",
-    description: "Set world-writable permissions",
-    platform: "unix",
-  },
-  {
-    id: "ask-rm-recursive",
-    pattern: "rm\\s+-rf\\s+(?!/)",
-    type: "ask",
-    description: "Recursive delete (non-root)",
-  },
-  {
-    id: "ask-sudo",
-    pattern: "sudo\\s+(?!apt-get)",
-    type: "ask",
-    description: "Superuser command",
-  },
-  {
-    id: "ask-curl-http",
-    pattern: "(curl|wget)\\s+(?!https://)",
-    type: "ask",
-    description: "Non-HTTPS download",
-  },
-  {
-    id: "allow-npm",
-    pattern: "^(npm|npx|yarn|pnpm)\\s",
-    type: "allow",
-    description: "Package manager commands",
-  },
-  {
-    id: "allow-git",
-    pattern: "^(git|git\\s+(add|commit|push|pull|checkout|switch|merge|branch|log|status|diff|show))",
-    type: "allow",
-    description: "Git operations",
-  },
-  {
-    id: "allow-test",
-    pattern: "^(npm run test|yarn test|pnpm test|pytest|cargo test|go test)",
-    type: "allow",
-    description: "Test runners",
-  },
-  {
-    id: "allow-build",
-    pattern: "^(npm run build|yarn build|pnpm build|tsc|cargo build|go build|make)",
-    type: "allow",
-    description: "Build tools",
-  },
-  {
-    id: "allow-pip",
-    pattern: "^pip(3)?\\s+(install|uninstall|list|freeze|show)",
-    type: "allow",
-    description: "Python package management",
-  },
-  {
-    id: "allow-fs",
-    pattern: "^(echo|cat|head|tail|mkdir|cp|mv|touch|find|wc|sort|uniq|ls|dir|type)",
-    type: "allow",
-    description: "Basic filesystem operations",
-  },
-];
-
-const READONLY_TOOLS = [
-  "grep", "glob", "read_file", "git_log", "git_status", "ls",
-  "echo", "cat", "head", "tail", "find", "wc", "sort", "uniq",
-  "diff", "git_diff", "git_show", "npm_list", "npm_view",
-];
-
-interface CacheEntry {
-  toolName: string;
-  command: string;
-  decision: PermissionDecision;
-  timestamp: number;
-}
-
-const decisionCache: CacheEntry[] = [];
-const MAX_CACHE_SIZE = 500;
-
-const CACHE_TTL_BY_LAYER: Record<string, number> = {
-  whitelist: 1800000,
-  ai_classifier: 300000,
-  cache: 600000,
-  default: 300000,
-};
-
-const CACHE_TTL_ALLOW = 1800000;
-const CACHE_TTL_CONFIRMATION_REQUIRED = 120000;
-
-function getCacheTTL(decision: PermissionDecision): number {
-  if (decision.layer && CACHE_TTL_BY_LAYER[decision.layer]) {
-    return CACHE_TTL_BY_LAYER[decision.layer];
-  }
-  if (decision.confirmationRequired) {
-    return CACHE_TTL_CONFIRMATION_REQUIRED;
-  }
-  if (decision.allowed && !decision.canOverride) {
-    return CACHE_TTL_ALLOW;
-  }
-  return CACHE_TTL_BY_LAYER.default;
-}
-
-function lookupCache(toolCall: ToolCall): PermissionDecision | null {
-  const command = JSON.stringify(toolCall.arguments);
-  const now = Date.now();
-
-  const index = decisionCache.findIndex((c) => {
-    if (c.toolName !== toolCall.name || c.command !== command) return false;
-    const ttl = getCacheTTL(c.decision);
-    return now - c.timestamp < ttl;
-  });
-
-  if (index >= 0) {
-    const entry = decisionCache[index];
-    decisionCache.splice(index, 1);
-    decisionCache.push(entry);
-    return entry.decision;
-  }
-
-  return null;
-}
-
-function addToCache(toolCall: ToolCall, decision: PermissionDecision): void {
-  const command = JSON.stringify(toolCall.arguments);
-  decisionCache.push({
-    toolName: toolCall.name,
-    command,
-    decision,
-    timestamp: Date.now(),
-  });
-
-  pruneStaleEntries();
-
-  if (decisionCache.length > MAX_CACHE_SIZE) {
-    decisionCache.shift();
-  }
-}
-
-function pruneStaleEntries(): void {
-  const now = Date.now();
-  for (let i = decisionCache.length - 1; i >= 0; i--) {
-    const ttl = getCacheTTL(decisionCache[i].decision);
-    if (now - decisionCache[i].timestamp > ttl * 2) {
-      decisionCache.splice(i, 1);
-    }
-  }
-}
-
-function classifyCommandPerTier(
-  command: string,
-  platform: PlatformInfo,
-  customRules: PermissionRule[]
-): { type: PermissionRuleType; rule?: PermissionRule } {
-  const allRules = [...BUILTIN_RULES, ...customRules];
-  const isWindows = platform.os === "windows";
-  const isUnix = platform.os === "macos" || platform.os === "linux";
-
-  for (const rule of allRules) {
-    if (rule.platform === "windows" && !isWindows) continue;
-    if (rule.platform === "unix" && !isUnix) continue;
-
-    try {
-      if (new RegExp(rule.pattern, "i").test(command)) {
-        return { type: rule.type, rule };
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return { type: "ask" };
 }
 
 export class PermissionPipeline {
@@ -287,7 +70,7 @@ export class PermissionPipeline {
   }
 
   addDenyPattern(pattern: string): void {
-    this.addRule(pattern, "deny", `User-defined deny pattern`);
+    this.addRule(pattern, "deny", "User-defined deny pattern");
   }
 
   removeDenyPattern(pattern: string): boolean {
@@ -320,23 +103,30 @@ export class PermissionPipeline {
     const cached = lookupCache(toolCall);
     if (cached) return cached;
 
-    // Plan mode: only read-only
     if (this.mode === "plan") {
-      const isReadOnly = READONLY_TOOLS.includes(toolCall.name) ||
-        (toolCall.name === "shell_command" && command.length > 0 && !classifyCommandCheck(command, platform));
-      const decision: PermissionDecision = {
-        allowed: isReadOnly,
-        reason: isReadOnly
-          ? "Read-only tool allowed in plan mode"
-          : "Plan mode: write tools are blocked",
-        layer: "whitelist",
-        canOverride: false,
-      };
+      const decision = this.planModeDecision(toolCall, platform);
       addToCache(toolCall, decision);
       return decision;
     }
 
-    // Tier 1: Check DENY rules (highest precedence, never overridable)
+    if (this.mode === "defaultDeny") {
+      const decision = this.defaultDenyDecision(toolCall, command, platform);
+      addToCache(toolCall, decision);
+      return decision;
+    }
+
+    if (this.mode === "autoApprove") {
+      const decision = this.autoApproveDecision(toolCall, command, platform);
+      addToCache(toolCall, decision);
+      return decision;
+    }
+
+    if (this.mode === "sandbox") {
+      const decision = this.sandboxModeDecision(toolCall, command, platform);
+      addToCache(toolCall, decision);
+      return decision;
+    }
+
     if (command.length > 0) {
       const denyDecision = this.checkDenyTier(command, platform);
       if (denyDecision) {
@@ -345,7 +135,6 @@ export class PermissionPipeline {
       }
     }
 
-    // Read-only tools: automatic allow
     if (READONLY_TOOLS.includes(toolCall.name)) {
       const decision: PermissionDecision = {
         allowed: true,
@@ -357,7 +146,6 @@ export class PermissionPipeline {
       return decision;
     }
 
-    // Non-shell write tools: trust AI
     if (toolCall.name !== "shell_command" && command.length === 0) {
       const decision: PermissionDecision = {
         allowed: true,
@@ -369,7 +157,6 @@ export class PermissionPipeline {
       return decision;
     }
 
-    // Tier 2: Check ASK rules (requires confirmation)
     if (command.length > 0) {
       const askDecision = this.checkAskTier(command, platform);
       if (askDecision) {
@@ -378,7 +165,6 @@ export class PermissionPipeline {
       }
     }
 
-    // Tier 3: Check ALLOW rules (automatic)
     if (command.length > 0) {
       const allowDecision = this.checkAllowTier(command, platform);
       if (allowDecision) {
@@ -387,104 +173,189 @@ export class PermissionPipeline {
       }
     }
 
-    // Fallback: AI classifier for unknown commands
     const aiDecision = this.aiClassify(toolCall, command, platform);
     addToCache(toolCall, aiDecision);
     return aiDecision;
   }
 
-  private checkDenyTier(command: string, platform: PlatformInfo): PermissionDecision | null {
-    const allRules = [...BUILTIN_RULES, ...this.customRules];
-    const isWindows = platform.os === "windows";
-    const isUnix = platform.os === "macos" || platform.os === "linux";
+  private defaultDenyDecision(
+    toolCall: ToolCall,
+    command: string,
+    platform: PlatformInfo
+  ): PermissionDecision {
+    const isReadOnly = READONLY_TOOLS.includes(toolCall.name);
 
-    for (const rule of allRules) {
-      if (rule.type !== "deny") continue;
-      if (rule.platform === "windows" && !isWindows) continue;
-      if (rule.platform === "unix" && !isUnix) continue;
+    if (isReadOnly) {
+      return {
+        allowed: true,
+        reason: "Read-only tool allowed in defaultDeny mode",
+        layer: "whitelist",
+        canOverride: false,
+      };
+    }
 
-      try {
-        if (new RegExp(rule.pattern, "i").test(command)) {
+    if (command.length > 0) {
+      const denyDecision = this.checkDenyTier(command, platform);
+      if (denyDecision && !denyDecision.allowed) {
+        return denyDecision;
+      }
+    }
+
+    return {
+      allowed: false,
+      reason: `Default-deny mode: ${toolCall.name} requires explicit approval`,
+      layer: "ai_classifier",
+      canOverride: true,
+      confirmationRequired: true,
+    };
+  }
+
+  private autoApproveDecision(
+    toolCall: ToolCall,
+    command: string,
+    platform: PlatformInfo
+  ): PermissionDecision {
+    if (command.length > 0) {
+      const denyDecision = this.checkDenyTier(command, platform);
+      if (denyDecision && !denyDecision.allowed) {
+        return denyDecision;
+      }
+
+      const guard = new AIGuard(platform);
+      const guardResult = guard.validateShellCommand(command);
+      if (!guardResult.passed && guardResult.confidence < 0.3) {
+        return {
+          allowed: false,
+          reason: `Auto-approve blocked: ${guardResult.reason || "very low confidence"}`,
+          layer: "ai_classifier",
+          canOverride: true,
+          confirmationRequired: true,
+        };
+      }
+    }
+
+    return {
+      allowed: true,
+      reason: `Auto-approved: ${toolCall.name}`,
+      layer: "whitelist",
+      canOverride: false,
+    };
+  }
+
+  private sandboxModeDecision(
+    toolCall: ToolCall,
+    command: string,
+    platform: PlatformInfo
+  ): PermissionDecision {
+    const isReadOnly = READONLY_TOOLS.includes(toolCall.name);
+
+    if (isReadOnly) {
+      return {
+        allowed: true,
+        reason: "Read-only tool allowed in sandbox mode",
+        layer: "whitelist",
+        canOverride: false,
+      };
+    }
+
+    if (command.length > 0) {
+      const denyDecision = this.checkDenyTier(command, platform);
+      if (denyDecision && !denyDecision.allowed) {
+        return denyDecision;
+      }
+
+      const dangerousPatterns = [
+        /\brm\s+-rf\s+\//i, /\bdel\s+\/[sf]/i,
+        /\bformat\s+[a-z]:/i, /\bshutdown/i, /\breboot/i,
+        /\bsudo\s+(?!apt-get)/i,
+      ];
+
+      for (const pattern of dangerousPatterns) {
+        if (pattern.test(command)) {
           return {
             allowed: false,
-            reason: `DENY: ${rule.description} (${rule.id})`,
+            reason: `Sandbox mode: blocked destructive command`,
             layer: "cache",
             canOverride: false,
           };
         }
-      } catch {
-        continue;
       }
     }
 
+    return {
+      allowed: true,
+      reason: `Sandbox mode: ${toolCall.name} allowed (non-destructive)`,
+      layer: "whitelist",
+      canOverride: false,
+      confirmationRequired: !isReadOnly,
+    };
+  }
+
+  private planModeDecision(
+    toolCall: ToolCall,
+    _platform: PlatformInfo
+  ): PermissionDecision {
+    const isReadOnly = READONLY_TOOLS.includes(toolCall.name);
+    return {
+      allowed: isReadOnly,
+      reason: isReadOnly
+        ? "Read-only tool allowed in plan mode"
+        : "Plan mode: write tools are blocked",
+      layer: "whitelist",
+      canOverride: false,
+    };
+  }
+
+  private checkDenyTier(command: string, platform: PlatformInfo): PermissionDecision | null {
+    const allRules = [...BUILTIN_RULES, ...this.customRules];
+    const rule = matchRuleTier(command, platform, allRules, "deny");
+    if (rule) {
+      return {
+        allowed: false,
+        reason: `DENY: ${rule.description} (${rule.id})`,
+        layer: "cache",
+        canOverride: false,
+      };
+    }
     return null;
   }
 
   private checkAskTier(command: string, platform: PlatformInfo): PermissionDecision | null {
     const allRules = [...BUILTIN_RULES, ...this.customRules];
-    const isWindows = platform.os === "windows";
-    const isUnix = platform.os === "macos" || platform.os === "linux";
-
-    for (const rule of allRules) {
-      if (rule.type !== "ask") continue;
-      if (rule.platform === "windows" && !isWindows) continue;
-      if (rule.platform === "unix" && !isUnix) continue;
-
-      try {
-        if (new RegExp(rule.pattern, "i").test(command)) {
-          const hasPipes = command.includes("|");
-          const subCommandCount = command.split(/[|;&]/).length;
-
-          if (subCommandCount > 50) {
-            return {
-              allowed: false,
-              reason: `ASK: ${rule.description} + has ${subCommandCount} sub-commands (limit: 50)`,
-              layer: "ai_classifier",
-              canOverride: true,
-              confirmationRequired: true,
-            };
-          }
-
-          return {
-            allowed: false,
-            reason: `ASK: ${rule.description} (${rule.id}) - Type "I understand the risk" to proceed`,
-            layer: "ai_classifier",
-            canOverride: true,
-            confirmationRequired: true,
-          };
-        }
-      } catch {
-        continue;
+    const rule = matchRuleTier(command, platform, allRules, "ask");
+    if (rule) {
+      const subCommandCount = command.split(/[|;&]/).length;
+      if (subCommandCount > 50) {
+        return {
+          allowed: false,
+          reason: `ASK: ${rule.description} + has ${subCommandCount} sub-commands (limit: 50)`,
+          layer: "ai_classifier",
+          canOverride: true,
+          confirmationRequired: true,
+        };
       }
+      return {
+        allowed: false,
+        reason: `ASK: ${rule.description} (${rule.id}) - Type "I understand the risk" to proceed`,
+        layer: "ai_classifier",
+        canOverride: true,
+        confirmationRequired: true,
+      };
     }
-
     return null;
   }
 
   private checkAllowTier(command: string, platform: PlatformInfo): PermissionDecision | null {
     const allRules = [...BUILTIN_RULES, ...this.customRules];
-    const isWindows = platform.os === "windows";
-    const isUnix = platform.os === "macos" || platform.os === "linux";
-
-    for (const rule of allRules) {
-      if (rule.type !== "allow") continue;
-      if (rule.platform === "windows" && !isWindows) continue;
-      if (rule.platform === "unix" && !isUnix) continue;
-
-      try {
-        if (new RegExp(rule.pattern, "i").test(command)) {
-          return {
-            allowed: true,
-            reason: `ALLOW: ${rule.description}`,
-            layer: "whitelist",
-            canOverride: false,
-          };
-        }
-      } catch {
-        continue;
-      }
+    const rule = matchRuleTier(command, platform, allRules, "allow");
+    if (rule) {
+      return {
+        allowed: true,
+        reason: `ALLOW: ${rule.description}`,
+        layer: "whitelist",
+        canOverride: false,
+      };
     }
-
     return null;
   }
 
@@ -544,27 +415,6 @@ export class PermissionPipeline {
   }
 
   clearCache(): void {
-    decisionCache.length = 0;
+    clearDecisionCache();
   }
-}
-
-function classifyCommandCheck(command: string, platform: PlatformInfo): boolean {
-  const allRules = [...BUILTIN_RULES];
-  const isWindows = platform.os === "windows";
-  const isUnix = platform.os === "macos" || platform.os === "linux";
-
-  for (const rule of allRules) {
-    if (rule.platform === "windows" && !isWindows) continue;
-    if (rule.platform === "unix" && !isUnix) continue;
-    if (rule.type === "allow") continue;
-
-    try {
-      if (new RegExp(rule.pattern, "i").test(command)) {
-        return true;
-      }
-    } catch {
-      continue;
-    }
-  }
-  return false;
 }

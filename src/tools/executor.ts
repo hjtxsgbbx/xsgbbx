@@ -1,21 +1,39 @@
 import {
-  Tool,
-  ToolCall,
-  ToolResult,
-  ExecutionContext,
-  PermissionDecision,
-  AuditLogEntry,
+  type Tool,
+  type ToolCall,
+  type ToolResult,
+  type ExecutionContext,
+  type PermissionDecision,
+  type AuditLogEntry,
 } from "../types/index.js";
-import { PermissionPipeline } from "../permissions/index.js";
-import { AuditLogger } from "../storage/index.js";
+import { type PermissionPipeline } from "../permissions/index.js";
+import { type AuditLogger } from "../storage/index.js";
+import { executePreToolUseHooks, executePostToolUseHooks, type HooksSettings } from "../engine/hook-system.js";
+
+const ERROR_UNKNOWN_TOOL = "UNKNOWN_TOOL";
+const ERROR_PERMISSION_DENIED = "PERMISSION_DENIED";
+const ERROR_CONFIRMATION_REQUIRED = "CONFIRMATION_REQUIRED";
+const ERROR_TOOL_ERROR = "TOOL_ERROR";
+const AUDIT_SUMMARY_MAX_LENGTH = 200;
+
+const DEFAULT_PERMISSION: PermissionDecision = {
+  allowed: true,
+  layer: "whitelist",
+  canOverride: false,
+};
 
 export class StreamingToolExecutor {
   private permissionPipeline: PermissionPipeline;
   private auditLogger: AuditLogger | null = null;
+  private sessionHooks: HooksSettings = {};
 
   constructor(permissionPipeline: PermissionPipeline, auditLogger?: AuditLogger) {
     this.permissionPipeline = permissionPipeline;
     this.auditLogger = auditLogger || null;
+  }
+
+  setHooks(hooks: HooksSettings): void {
+    this.sessionHooks = hooks;
   }
 
   setAuditLogger(logger: AuditLogger): void {
@@ -27,25 +45,29 @@ export class StreamingToolExecutor {
     tools: Tool[],
     context: ExecutionContext
   ): Promise<ToolResult[]> {
+    const toolMap = new Map(tools.map((t) => [t.name, t]));
     const results: ToolResult[] = [];
-    const readonlyCalls = toolCalls.filter((tc) => {
-      const tool = tools.find((t) => t.name === tc.name);
-      return tool?.readonly === true;
-    });
-    const writeCalls = toolCalls.filter((tc) => {
-      const tool = tools.find((t) => t.name === tc.name);
-      return tool?.readonly === false;
-    });
+    const readonlyCalls: ToolCall[] = [];
+    const writeCalls: ToolCall[] = [];
+
+    for (const tc of toolCalls) {
+      const tool = toolMap.get(tc.name);
+      if (tool?.readonly) {
+        readonlyCalls.push(tc);
+      } else {
+        writeCalls.push(tc);
+      }
+    }
 
     if (readonlyCalls.length > 0) {
       const readonlyResults = await Promise.all(
-        readonlyCalls.map((tc) => this.executeOne(tc, tools, context))
+        readonlyCalls.map((tc) => this.executeOne(tc, toolMap, context))
       );
       results.push(...readonlyResults);
     }
 
     for (const tc of writeCalls) {
-      const result = await this.executeOne(tc, tools, context);
+      const result = await this.executeOne(tc, toolMap, context);
       results.push(result);
     }
 
@@ -54,17 +76,17 @@ export class StreamingToolExecutor {
 
   private async executeOne(
     toolCall: ToolCall,
-    tools: Tool[],
+    toolMap: Map<string, Tool>,
     context: ExecutionContext
   ): Promise<ToolResult> {
-    const tool = tools.find((t) => t.name === toolCall.name);
+    const tool = toolMap.get(toolCall.name);
 
     if (!tool) {
-      this.logAudit(context, toolCall, "denied", "UNKNOWN_TOOL");
+      this.logAudit(context, toolCall, "denied", ERROR_UNKNOWN_TOOL);
       return {
         success: false,
         output: `Unknown tool: ${toolCall.name}`,
-        errorCode: "UNKNOWN_TOOL",
+        errorCode: ERROR_UNKNOWN_TOOL,
       };
     }
 
@@ -75,28 +97,49 @@ export class StreamingToolExecutor {
       );
 
       if (!decision.allowed) {
-        this.logAudit(context, toolCall, decision.allowed ? "allowed" : "denied", decision.reason);
+        this.logAudit(context, toolCall, "denied", decision.reason);
         return {
           success: false,
           output: `Permission denied (${decision.layer}): ${decision.reason}`,
-          errorCode: "PERMISSION_DENIED",
+          errorCode: ERROR_PERMISSION_DENIED,
         };
       }
 
       if (decision.confirmationRequired) {
         this.logAudit(context, toolCall, "denied", `Confirmation required: ${decision.reason}`);
+        return {
+          success: false,
+          output: `Confirmation required (${decision.layer}): ${decision.reason}. Please approve this action to proceed.`,
+          errorCode: ERROR_CONFIRMATION_REQUIRED,
+        };
       }
+    }
+
+    // Pre-tool hooks
+    const preHookResults = await executePreToolUseHooks(
+      toolCall.name,
+      toolCall.arguments,
+      this.sessionHooks
+    );
+    const blocked = preHookResults.find(r => !r.allow);
+    if (blocked) {
+      return {
+        success: false,
+        output: blocked.message || `Blocked by PreToolUse hook`,
+        errorCode: "HOOK_BLOCKED",
+      };
     }
 
     try {
       const result = await tool.execute(toolCall.arguments, {
         ...context,
-        permissionLevel: {
-          allowed: true,
-          layer: "whitelist",
-          canOverride: false,
-        },
+        permissionLevel: DEFAULT_PERMISSION,
       });
+
+      // Post-tool hooks (fire-and-forget)
+      executePostToolUseHooks(toolCall.name, toolCall.arguments, result, this.sessionHooks)
+        .catch(() => {});
+
       this.logAudit(context, toolCall, "allowed", result.success ? "success" : result.errorCode || "error");
       return result;
     } catch (err: unknown) {
@@ -105,7 +148,7 @@ export class StreamingToolExecutor {
       return {
         success: false,
         output: message || "Tool execution failed",
-        errorCode: "TOOL_ERROR",
+        errorCode: ERROR_TOOL_ERROR,
       };
     }
   }
@@ -114,13 +157,13 @@ export class StreamingToolExecutor {
     context: ExecutionContext,
     toolCall: ToolCall,
     decision: AuditLogEntry["decision"],
-    reason?: string
+    _reason?: string
   ): void {
     if (!this.auditLogger) return;
 
     const commandSummary = toolCall.name === "shell_command"
-      ? String(toolCall.arguments.command || "").slice(0, 200)
-      : `${toolCall.name}(${JSON.stringify(toolCall.arguments).slice(0, 200)})`;
+      ? String(toolCall.arguments.command || "").slice(0, AUDIT_SUMMARY_MAX_LENGTH)
+      : `${toolCall.name}(${JSON.stringify(toolCall.arguments).slice(0, AUDIT_SUMMARY_MAX_LENGTH)})`;
 
     const entry: AuditLogEntry = {
       timestamp: new Date().toISOString(),

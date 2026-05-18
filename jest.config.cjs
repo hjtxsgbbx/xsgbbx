@@ -2,7 +2,13 @@ module.exports = {
   preset: "ts-jest/presets/default-esm",
   testEnvironment: "node",
   roots: ["<rootDir>/test"],
-  testMatch: ["**/*.test.ts"],
+  testMatch: [
+    "**/test/unit/**/*.test.ts",
+    "**/test/integration/**/*.test.ts",
+    "**/test/e2e/**/*.test.ts",
+    "**/test/benchmark/**/*.test.ts",
+    "**/test/**/*.test.ts",
+  ],
   extensionsToTreatAsEsm: [".ts"],
   moduleNameMapper: {
     "^(\\.\\.?/.+)\\.js$": "$1",
@@ -19,4 +25,20 @@ module.exports = {
       },
     ],
   },
+  collectCoverageFrom: [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "!src/**/*.d.ts",
+    "!src/index.ts",
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 44,
+      functions: 60,
+      lines: 60,
+      statements: 60,
+    },
+  },
+  coverageReporters: ["text", "text-summary", "lcov"],
+  coverageDirectory: "coverage",
 };

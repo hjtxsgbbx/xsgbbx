@@ -1,6 +1,15 @@
-import { exec, execSync, spawn } from "child_process";
-import * as path from "path";
-import { PlatformInfo, CommandAdapterResult } from "../types/index.js";
+import { execSync, spawn } from "child_process";
+import type { PlatformInfo, CommandAdapterResult } from "../types/index.js";
+
+const TIMEOUT_DEFAULT = 300_000;
+const TIMEOUT_COMMAND_EXISTS = 5_000;
+const TIMEOUT_COMMAND_EXISTS_UNIX = 3_000;
+const MAX_BUFFER = 10 * 1024 * 1024;
+const OUTPUT_TRUNCATE_THRESHOLD = 8_000;
+const OUTPUT_SLICE_SIZE = 4_000;
+const COMMAND_LENGTH_LIMIT = 4_096;
+const ARG_LENGTH_LIMIT = 256;
+const SUB_COMMAND_LIMIT = 50;
 
 export interface ShellResult {
   stdout: string;
@@ -22,7 +31,7 @@ export function adaptCommand(
   let shell = platform.shell;
   let args: string[] = [];
   let safe = true;
-  let subCommandCount = countSubCommands(command);
+  const subCommandCount = countSubCommands(command);
 
   if (isWindows && isCmd) {
     adaptedCommand = adaptForCmd(command);
@@ -42,7 +51,7 @@ export function adaptCommand(
     shell = platform.shell || "/bin/bash";
   }
 
-  if (subCommandCount > 50) {
+  if (subCommandCount > SUB_COMMAND_LIMIT) {
     safe = false;
   }
 
@@ -67,7 +76,31 @@ function adaptForCmd(command: string): string {
 }
 
 function adaptForPowerShell(command: string): string {
-  return command;
+  let adapted = command;
+
+  // CMD → PowerShell redirection: 2>nul → 2>$null, >nul → >$null, 1>nul → 1>$null
+  adapted = adapted.replace(/([12]?)\s*>\s*nul\b/gi, "$1>`$null");
+  // Undo over-escape of $ when preceded by backtick
+  adapted = adapted.replace(/``/g, "`");
+
+  // CMD → PowerShell: nul → $null (standalone, not part of redirection)
+  adapted = adapted.replace(/\bnul\b/g, "`$null");
+
+  // Escaped dollar signs for PowerShell
+  adapted = adapted.replace(/\$([A-Z_]+)/g, "`$$1");
+
+  // CMD → PowerShell: && → ; (PowerShell uses ; not &&)
+  adapted = adapted.replace(/&&/g, ";");
+
+  if (!adapted.startsWith("&") && !adapted.startsWith(".") && adapted.includes(" ")) {
+    const firstSpace = adapted.indexOf(" ");
+    const cmd = adapted.slice(0, firstSpace);
+    if (cmd.includes("-") || cmd.includes("/")) {
+      adapted = `& ${adapted}`;
+    }
+  }
+
+  return adapted;
 }
 
 function countSubCommands(command: string): number {
@@ -85,7 +118,7 @@ export async function shellExec(
   return new Promise((resolve) => {
     const child = spawn(adapted.shell, adapted.args, {
       cwd: options?.cwd || process.cwd(),
-      timeout: options?.timeout || 300000,
+      timeout: options?.timeout || TIMEOUT_DEFAULT,
       env: { ...process.env },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -95,15 +128,15 @@ export async function shellExec(
 
     child.stdout?.on("data", (data: Buffer) => {
       stdout += data.toString();
-      if (stdout.length > 8000) {
-        stdout = stdout.slice(0, 4000) + "\n...(truncated)...\n" + stdout.slice(-4000);
+      if (stdout.length > OUTPUT_TRUNCATE_THRESHOLD) {
+        stdout = truncateOutput(stdout);
       }
     });
 
     child.stderr?.on("data", (data: Buffer) => {
       stderr += data.toString();
-      if (stderr.length > 8000) {
-        stderr = stderr.slice(0, 4000) + "\n...(truncated)...\n" + stderr.slice(-4000);
+      if (stderr.length > OUTPUT_TRUNCATE_THRESHOLD) {
+        stderr = truncateOutput(stderr);
       }
     });
 
@@ -131,14 +164,14 @@ export function shellExecSync(
   options?: { cwd?: string }
 ): ShellResult {
   const adapted = adaptCommand(command, platform);
-  const shellCmd = `"${adapted.shell}" ${adapted.args.map((a) => `"${a}"`).join(" ")}`;
 
   try {
-    const result = execSync(shellCmd, {
+    const result = execSync(adapted.command, {
       cwd: options?.cwd || process.cwd(),
       encoding: "utf-8",
-      timeout: 300000,
-      maxBuffer: 10 * 1024 * 1024,
+      timeout: TIMEOUT_DEFAULT,
+      maxBuffer: MAX_BUFFER,
+      shell: adapted.shell,
     });
     return { stdout: result.trim(), stderr: "", exitCode: 0 };
   } catch (err: unknown) {
@@ -151,19 +184,23 @@ export function shellExecSync(
   }
 }
 
+function truncateOutput(output: string): string {
+  return output.slice(0, OUTPUT_SLICE_SIZE) + "\n...(truncated)...\n" + output.slice(-OUTPUT_SLICE_SIZE);
+}
+
 export function sanitizeShellArg(arg: string): string {
   if (!arg || arg.length === 0) return arg;
 
-  if (arg.length > 256) {
-    arg = arg.slice(0, 256);
+  if (arg.length > ARG_LENGTH_LIMIT) {
+    arg = arg.slice(0, ARG_LENGTH_LIMIT);
   }
 
-  const dangerous = /[;&|`$(){}\[\]<>\\!"'\n\r\t]/g;
+  const dangerous = /[;&|`$(){}[\]<>\\!"'\n\r\t]/g;
   if (dangerous.test(arg)) {
     arg = arg.replace(dangerous, "");
   }
 
-  arg = arg.replace(/--/g, "").replace(/\/\//g, "/");
+  arg = arg.replace(/\/\//g, "/");
 
   return arg.trim();
 }
@@ -173,8 +210,8 @@ export function validateShellCommand(command: string): { valid: boolean; reason?
     return { valid: false, reason: "Empty command" };
   }
 
-  if (command.length > 4096) {
-    return { valid: false, reason: "Command exceeds 4096 character limit" };
+  if (command.length > COMMAND_LENGTH_LIMIT) {
+    return { valid: false, reason: `Command exceeds ${COMMAND_LENGTH_LIMIT} character limit` };
   }
 
   const shellInjectionPatterns = [
@@ -183,6 +220,9 @@ export function validateShellCommand(command: string): { valid: boolean; reason?
     /`[^`]*`/,
     /;\s*(rm|sudo|chmod|format|del)/i,
     /\|\s*(rm|sudo|shutdown)/i,
+    /\\x[0-9a-fA-F]{2}/,
+    /\\u[0-9a-fA-F]{4}/,
+    /\\[0-7]{3}/,
   ];
 
   for (const pattern of shellInjectionPatterns) {
@@ -206,7 +246,7 @@ export function commandExists(
       const result = execSync(`where ${sanitized}`, {
         encoding: "utf-8",
         stdio: "pipe",
-        timeout: 5000,
+        timeout: TIMEOUT_COMMAND_EXISTS,
         windowsHide: true,
       });
       return result.trim().length > 0 && result.toLowerCase().includes(sanitized.toLowerCase());
@@ -214,7 +254,7 @@ export function commandExists(
       const result = execSync(`which ${sanitized}`, {
         encoding: "utf-8",
         stdio: "pipe",
-        timeout: 3000,
+        timeout: TIMEOUT_COMMAND_EXISTS_UNIX,
       });
       return result.trim().length > 0;
     }

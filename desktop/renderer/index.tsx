@@ -1,6 +1,15 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import App from "./App.js";
+import { App } from "./App.js";
+
+(function initTheme() {
+  const KEY = "agent1_theme";
+  const theme = (function() {
+    try { return localStorage.getItem(KEY) || "developer"; }
+    catch { return "developer"; }
+  })();
+  document.documentElement.setAttribute("data-theme", theme);
+})();
 
 const container = document.getElementById("root");
 if (container) {

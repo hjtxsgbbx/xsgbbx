@@ -3,10 +3,9 @@ import { render } from "ink";
 import { App } from "./app.js";
 import { detectPlatform } from "../pal/index.js";
 import { ConfigStore, SessionStore } from "../storage/index.js";
-import { createQueryEngine, QueryEngineImpl, loadProjectMemory } from "../core/index.js";
-import { Config, PlatformInfo } from "../types/index.js";
-import * as fs from "fs";
-import * as path from "path";
+import { createQueryEngine, type QueryEngineImpl } from "../engine/index.js";
+import { loadProjectMemory } from "../intelligence/index.js";
+import { type Config, type PlatformInfo } from "../types/index.js";
 
 interface MainProps {
   config: Config;
@@ -25,41 +24,45 @@ const MainComponent: React.FC<MainProps> = ({
 }) => {
   const [config, setConfig] = useState<Config>(initialConfig);
   const [engine, setEngine] = useState<QueryEngineImpl | null>(null);
-  const configStore = new ConfigStore();
-  const sessionStore = new SessionStore();
+  const [configStore] = useState(() => new ConfigStore());
+  const [sessionStore] = useState(() => new SessionStore());
 
   useEffect(() => {
-    if (config.chosen_provider) {
-      const eng = createQueryEngine(config.chosen_provider);
-      setEngine(eng);
+    try {
+      const cfg = configStore.load();
+      setConfig(cfg);
 
-      const lastSessionId = sessionStore.getLastSessionId();
-      if (lastSessionId) {
-        const session = sessionStore.loadSession(lastSessionId);
-        if (session) {
+      const hasProvider = !!cfg.chosen_provider;
+      if (hasProvider) {
+        const eng = createQueryEngine(cfg);
+        setEngine(eng);
+
+        const lastSessionId = sessionStore.getLastSessionId();
+        if (lastSessionId) {
+          const session = sessionStore.loadSession(lastSessionId);
+          if (session) {
+            eng.setSession(session);
+          }
+        } else {
+          const session = sessionStore.create(
+            projectPath,
+            `${platform.os}`,
+            platform.terminal,
+            cfg.chosen_provider,
+            cfg.model
+          );
           eng.setSession(session);
         }
-      } else {
-        const session = sessionStore.create(
-          projectPath,
-          `${platform.os}`,
-          platform.terminal,
-          config.chosen_provider,
-          config.model
-        );
-        eng.setSession(session);
       }
+    } catch (err) {
+      console.error("Failed to load config:", err);
     }
-  }, [config.chosen_provider]);
+  }, []);
 
   const handleConfigChange = (newConfig: Config) => {
     setConfig(newConfig);
     configStore.save(newConfig);
   };
-
-  if (!engine) {
-    return null;
-  }
 
   return (
     <App
@@ -70,6 +73,7 @@ const MainComponent: React.FC<MainProps> = ({
       projectMemory={projectMemory}
       onConfigChange={handleConfigChange}
       onExit={onExit}
+      onEngineReady={(eng) => setEngine(eng)}
     />
   );
 };
@@ -112,14 +116,10 @@ function displayWelcome(): void {
   console.log("║    跨平台 AI 编程助手 - CLI MVP                      ║");
   console.log("╠══════════════════════════════════════════════════════╣");
   console.log("║                                                       ║");
-  console.log("║  📋 知情同意声明 / Informed Consent                   ║");
-  console.log("║  您的代码片段和指令将被发送至您选择的 AI 提供商       ║");
-  console.log("║  (Anthropic 或 OpenAI) 以生成编程建议。                ║");
-  console.log("║  所有数据存储于本地 ~/.agent_1/                        ║");
-  console.log("║  完整隐私政策见仓库 PRIVACY.md                        ║");
+  console.log("║  📋 数据声明                                          ║");
+  console.log("║  您的代码和指令将被发送至 DeepSeek API 服务器          ║");
+  console.log("║  所有其他数据存储在本地 ~/.agent_1/                    ║");
   console.log("║                                                       ║");
-  console.log("║  使用本工具即表示您已知情并同意上述数据共享。         ║");
-  console.log("║  使用 --accept-terms 跳过此提示                       ║");
   console.log("║                                                       ║");
   console.log("╠══════════════════════════════════════════════════════╣");
   console.log("║  Type /help for commands    |  Ctrl+C to exit         ║");
@@ -139,9 +139,16 @@ async function headlessMode(
     process.exit(1);
   }
 
-  const engine = createQueryEngine(config.chosen_provider || "anthropic");
+  let engine: QueryEngineImpl;
+  try {
+    engine = createQueryEngine(config);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Failed to create engine: ${message}`);
+    process.exit(1);
+  }
 
-  const input = prompt || process.argv.slice(2).join(" ");
+  const input = prompt || process.argv.slice(2).filter(a => !a.startsWith("--")).join(" ");
   if (!input) {
     console.log("Error: No input provided for headless mode.");
     process.exit(1);

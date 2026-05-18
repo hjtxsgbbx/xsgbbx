@@ -1,77 +1,106 @@
 # Changelog
 
-All notable changes to agent_1 will be documented in this file.
+All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
----
+## [Unreleased]
+
+### Added
+- IterationFramework class for systematic iteration management (requirements, designs, iterations, code reviews, tech debts, feedback reports)
+- Requirement priority assessment matrix (businessValue×0.35 + userImpact×0.25 + priorityWeight×0.25 - technicalComplexity×0.1 - effortEstimate×0.05)
+- Quality gates: testPassRate≥95%, testCoverage≥80%, avgResponseTime≤500ms, CPU≤70%, Memory≤80%, errorRate≤0.1%
+- Design document review workflow with status transitions and comments
+- Tech debt tracking with severity-based sorting and resolution tracking
+- Iteration summary generation with quality gate pass/fail assessment
+- Feedback report generation with user satisfaction, feature usage, and performance metrics
+- Data persistence for requirements, iterations, and tech debts (JSON files)
+- Event-driven architecture for requirement, design, and iteration lifecycle
+- Dockerfile with multi-stage build, non-root user, health check, and resource limits
+- docker-compose.yml with CLI and Web services, environment variable injection, and volume persistence
+- .dockerignore for optimized Docker builds
+- 21 iteration framework unit tests
+- 14 LLM Providers (9 cloud + 4 local + 1 custom): Anthropic, OpenAI, Google Gemini, DeepSeek, Mistral, Groq, Together AI, xAI (Grok), Cohere, Ollama, LM Studio, llama.cpp, vLLM, OpenAI Compatible
+- LocalProviderScanner: automatic detection and activation of local model runtimes (Ollama, LM Studio, llama.cpp, vLLM) with 30s periodic scanning
+- Auto-activation of local providers when no cloud API key is configured
+- QueryPerformanceTracker: TTFB, total latency, TPS, memory usage tracking with P50/P95/P99 baselines
+- Performance tracking integration in QueryEngine.streamApiCall()
+- Desktop ChatPanel virtual scrolling for messages > 30 (overscan buffer, estimated height positioning)
+- Desktop sidebar drawer mode for screens < 700px (toggle button, overlay, cubic-bezier animation)
+- Desktop terminal panel resize handle styles
+- 32 model context window sizes and pricing data entries
+- 10 environment variable auto-detection keys (GOOGLE_API_KEY, GEMINI_API_KEY, MISTRAL_API_KEY, GROQ_API_KEY, TOGETHER_API_KEY, XAI_API_KEY, COHERE_API_KEY)
+- LOCAL_PROVIDER_PROBES constant for local runtime probe configuration
+- Desktop FeedbackPanel component with category selection (Bug/Feature/Improvement/Praise), local storage, and IPC submission
+- Feedback button in Desktop StatusBar with onFeedback callback
+- IPC channel `feedback:submit` with FeedbackCollector integration in ipc-bridge
+- MCP Protocol upgrade to 2025-06-18 with sampling/createMessage support
+- MCPModelPreferences, MCPSamplingMessage, MCPSamplingToolDefinition types
+- MCPClient.createSamplingMessage() and supportsSampling() methods
+- Slash command parser module (`src/cli/slash-command-parser.ts`) with resolveAlias, parseCommand, getAvailableCommands, getAvailableWorkflows
+- New CLI slash commands: /init (/i), /review (/r), /test (/t), /pr (/p)
+- Centralized constants module (`src/core/constants.ts`) for APP_VERSION, DEFAULT_MODEL, PROVIDER_DEFAULTS, TIMEOUTS, LIMITS
+- 82 new tests: MCP Sampling (30) + Slash Command Parser (52)
+
+### Changed
+- AuditLogger and MetricsCollector flush methods now use async I/O (fsp.appendFile) instead of synchronous writes
+- Added AuditLogger.flushSync() for test scenarios requiring immediate disk persistence
+- Desktop StatusBar now accepts onFeedback prop
+- Desktop App.tsx integrates FeedbackPanel with lazy loading and Suspense
+- Desktop preload whitelist includes `feedback:submit` channel
+- Desktop styles.css includes feedback UI styles with dual-theme support
+
+### Fixed
+- 8 test failures caused by async I/O changes in audit-logger and metrics-collector
+- AuditLogger integrity tests now properly await flushSync before assertions
+- MetricsCollector auto-flush test now waits for async event emission
+- Command injection vulnerability in keychain.ts (escapeShellArg/escapeDoubleQuoteArg)
 
 ## [1.0.0] - 2026-05-13
 
 ### Added
-- **Core CLI Agent** with TAOR Loop (Think→Act→Observe→Reflect), max 50 turns
-- **3-tier Permission Pipeline**: deny > ask > allow with custom rules
-- **4-level Context Compaction**: snip / micro / collapse / auto
-- **5-strategy Error Healing**: RETRY → INVESTIGATE → FIX → PIVOT → ASK
-- **PAL (Platform Abstraction Layer)**: cross-platform shell/fs/keychain
-- **AgentBridge**: unified CLI/Desktop/Web communication
-- **MCP (Model Context Protocol)** integration with stdio transport
-- **Git Shadow Checkpoint** system for safe rollback
-- **Plan/Act/Default** separate system prompts
-- **Repo Map** codebase structure generation (Aider-inspired)
-- **Circuit Breaker** pattern for API resilience
-- **Result/Either** error handling pattern
-- **Process Manager** for child process lifecycle
-- **Path traversal prevention** with workspace boundary checking
-- **Token budget management** with model-specific limits
-- **Electron desktop client** with sandbox + CSP security headers
-- **WebSocket web client** with heartbeat + exponential backoff reconnection
-- **Streaming responses** for Anthropic and OpenAI providers
-- **Parallel tool execution** for read-only operations
-- **Prompt caching** for Claude models with ephemeral markers
-- **Environment snapshot** capturing git state and project context
-- **Diff-based file editing** with fuzzy matching
-- **Tool result caching** with write invalidation
-- **Batch Mode** for background task execution
-- **PR workflow automation** with Conventional Commits
-- **Audit logging** for all tool executions and permission changes
-- **Certificate pinning** for API security
-- **Adaptive Thinking** (thinking_effort) for Claude 4+
-- **MCP Tasks Protocol** (SEP-1686/2669): task lifecycle management
-- **Structured Output** (JSON Mode) support
+- TAOR Loop (Think→Act→Observe→Reflect) core engine with max 50 turns
+- 3-tier Permission Pipeline (deny > ask > allow) with custom rules
+- 4-level Context Compaction (snip/micro/collapse/auto) with critical message protection
+- 5-strategy Error Healing (RETRY/INVESTIGATE/FIX/PIVOT/ASK)
+- PAL (Platform Abstraction Layer) for cross-platform shell/fs/keychain
+- AgentBridge for unified CLI/Desktop/Web communication
+- MCP (Model Context Protocol) integration with stdio transport
+- MCP Tasks Protocol (SEP-1686/2669) with full task lifecycle management
+- Git Shadow checkpoint system for safe rollback
+- Plan/Act/Default separate system prompts (Cline-inspired)
+- Repo Map codebase structure generation (Aider-inspired)
+- Circuit Breaker pattern for API resilience
+- Result/Either error handling pattern
+- Process Manager for child process lifecycle
+- Path traversal prevention with workspace boundary checking
+- Token budget management with model-specific limits
+- Adaptive Thinking (thinking_effort) for Claude 4.6+
+- Structured Output (JSON Mode) for API responses
+- Streaming response support for Anthropic and OpenAI providers
+- Parallel tool execution for read-only operations
+- Prompt caching for Claude models
+- Environment snapshot capturing git state and project context
+- Diff-based file editing with fuzzy matching
+- Tool result caching with write invalidation
+- Batch mode for background task execution
+- Comprehensive audit logging system
+- Certificate pinning for API security
+- CLI client with Ink/React rendering
+- Desktop client (Electron) with sandbox:true + CSP headers
+- Web client (WebSocket) with heartbeat + exponential backoff
 
 ### Infrastructure
-- **CI/CD Pipeline**: 6-stage GitHub Actions workflow
-  - Quick Quality Gates (TypeCheck + Lint)
-  - Cross-platform Test Matrix (ubuntu/windows/macos × Node 18/20/22)
-  - Build + CLI verification
-  - Desktop build + artifact upload
-  - Web build + artifact upload
-  - Pipeline status summary
-- **Git Flow branching strategy** (main/develop/feature/hotfix/release)
-- **Pre-commit hooks**: TypeCheck + Test + debug detection
-- **Commit-msg hooks**: Conventional Commits validation
-- **PR Template** with pre-merge checklist
-- **Sprint management templates**, retrospective templates
-- **Technical radar** (ADOPT/TRIAL/ASSESS/HOLD quadrants)
-- **Technology selection reports** with A/B evaluation and performance data
-
-### Documentation
-- README.md, PRIVACY.md, ADR.md
-- CONTRIBUTING.md (branch strategy, commit conventions, code review)
-- TECH_RADAR.md (bi-weekly technology trends)
-- TECH_SELECTION_REPORT.md (technology evaluation with benchmarks)
-- IMPLEMENTATION_DOC.md (change logs, deployment guides)
-- PROJECT_MANAGEMENT.md (sprint cycles, quality gates, feedback loops)
-
-### Tests
-- **225 tests** across **18 test suites**
-- Coverage: MCP types, provider, healer, compaction, permissions, PAL,
-  result, circuit breaker, process manager, audit logger, PR manager,
-  token counter, cost tracker, env snapshot, diff edit, tool cache,
-  security path guard, security sandbox
-
----
-
-*Last updated: 2026-05-13*
+- Git Flow branching strategy (main/develop/feature/hotfix/release)
+- 11-stage CI/CD pipeline with cross-platform test matrix
+- Pre-commit hooks (TypeScript check + test sanity)
+- Commit message validation (Conventional Commits)
+- PR template with checklist and label system
+- Sprint planning template with burndown tracking
+- Retrospective template with action item tracking
+- Daily standup template and automation script
+- Issue templates (Bug Report, Feature Request, User Feedback)
+- CODEOWNERS for automated review assignment
+- Jest test infrastructure with 18+ test suites
+- ESLint + TypeScript strict mode

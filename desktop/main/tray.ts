@@ -1,5 +1,9 @@
 import { Tray, Menu, BrowserWindow, nativeImage, app } from "electron";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 let tray: Tray | null = null;
 
