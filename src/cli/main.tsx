@@ -37,22 +37,15 @@ const MainComponent: React.FC<MainProps> = ({
         const eng = createQueryEngine(cfg);
         setEngine(eng);
 
-        const lastSessionId = sessionStore.getLastSessionId();
-        if (lastSessionId) {
-          const session = sessionStore.loadSession(lastSessionId);
-          if (session) {
-            eng.setSession(session);
-          }
-        } else {
-          const session = sessionStore.create(
-            projectPath,
-            `${platform.os}`,
-            platform.terminal,
-            cfg.chosen_provider,
-            cfg.model
-          );
-          eng.setSession(session);
-        }
+        // Always start with a fresh session — never restore old messages
+        const session = sessionStore.create(
+          projectPath,
+          `${platform.os}`,
+          platform.terminal,
+          cfg.chosen_provider,
+          cfg.model
+        );
+        eng.setSession(session);
       }
     } catch (err) {
       console.error("Failed to load config:", err);
