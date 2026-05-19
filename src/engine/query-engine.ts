@@ -550,7 +550,6 @@ export class QueryEngineImpl extends EventEmitter implements QueryEngine {
         const userText = lastUserMsg && typeof lastUserMsg.content === "string" ? lastUserMsg.content : "";
         const needsTools = /(read|edit|modify|change|fix|add|create|delete|remove|code|file|command|run|build|test|refactor|implement|bug|error|commit|push|install|deploy|config|search|find|write|open|show|check|\.ts|\.js|\.py|\.go|\.json|\.md|帮我|写|改|修|建|删|跑|编译|测试|查看|打开)/i.test(userText);
         const activeTools = needsTools ? this.tools : [];
-
         // ---- Stream API call ----
         const streamResult = await this.apiStreamer.streamApiCall(
           context, systemPrompt, currentModel, apiKey, activeTools,
