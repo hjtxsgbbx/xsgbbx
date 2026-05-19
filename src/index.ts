@@ -2,7 +2,7 @@
 
 import { createInterface } from "readline";
 import * as fs from "fs";
-import { startCLI } from "./cli/main.js";
+import { startCLI } from "./cli/chat.js";
 import { detectPlatform } from "./pal/index.js";
 import { ConfigStore, purgeAll, exportData } from "./storage/index.js";
 import type { AuditLogEntry } from "./types/index.js";
