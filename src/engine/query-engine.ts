@@ -542,9 +542,18 @@ export class QueryEngineImpl extends EventEmitter implements QueryEngine {
       const apiStartTime = Date.now();
 
       try {
+        // ---- Determine if this turn needs tools ----
+        // DeepSeek models are NOT RLHF-trained to ignore tools when chatting.
+        // Sending tools on every turn causes hallucinated tool calls.
+        // Only send tools when the user's message looks like a coding task.
+        const lastUserMsg = [...context.messages].reverse().find(m => m.role === "user");
+        const userText = lastUserMsg && typeof lastUserMsg.content === "string" ? lastUserMsg.content : "";
+        const needsTools = /(read|edit|modify|change|fix|add|create|delete|remove|code|file|command|run|build|test|refactor|implement|bug|error|commit|push|install|deploy|config|search|find|write|open|show|check|\.ts|\.js|\.py|\.go|\.json|\.md|帮我|写|改|修|建|删|跑|编译|测试|查看|打开)/i.test(userText);
+        const activeTools = needsTools ? this.tools : [];
+
         // ---- Stream API call ----
         const streamResult = await this.apiStreamer.streamApiCall(
-          context, systemPrompt, currentModel, apiKey, this.tools,
+          context, systemPrompt, currentModel, apiKey, activeTools,
           (text) => this.emit("streaming", text),
           (reasoning) => this.emit("reasoning", reasoning)
         );
