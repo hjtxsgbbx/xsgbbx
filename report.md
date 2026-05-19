@@ -28,7 +28,7 @@ xsgbbx针对上述痛点，提出以下解决方案：
 
 1. **本地优先，数据不出设备。** 所有代码处理、上下文管理、会话存储均在本地完成，仅API调用（用户显式许可）时传输必要提示词至AI提供商。
 
-2. **DeepSeek深度适配。** 充分利用DeepSeek V4 Pro的1M上下文窗口、reasoning_content机制，以及8.4倍于Claude Sonnet 4的成本优势（$0.435 vs $3.00/百万输入token）。
+2. **DeepSeek深度适配。** 充分利用DeepSeek V4 Pro的1M上下文窗口、reasoning_content机制，以及相比Claude Sonnet 4约1.7-4.3倍的成本优势（V4 Pro标准价格¥12/¥24每百万token），DeepSeek V4 Flash成本仅为Claude的1/21。
 
 3. **完全开源，MIT协议。** 零许可费用，用户可自由修改、审计、再分发源代码。
 
@@ -75,15 +75,15 @@ DeepSeek V4 Pro在以下维度对AI编程场景具有显著优势：
 
 | 模型 | 输入价格($/百万token) | 输出价格($/百万token) | 相对成本 |
 |------|:---:|:---:|:---:|
-| DeepSeek V4 Pro | $0.435 | $0.870 | 1.0x |
-| DeepSeek V4 Flash | $0.140 | $0.280 | 0.32x |
-| Claude Sonnet 4 | $3.000 | $15.000 | 6.9x-17.2x |
-| GPT-4o | $2.500 | $10.000 | 5.7x-11.5x |
-| Gemini 2.5 Pro | $1.250 | $10.000 | 2.9x-11.5x |
+| DeepSeek V4 Pro | $1.740 | $3.480 | 1.0x |
+| DeepSeek V4 Flash | $0.140 | $0.280 | 0.08x |
+| Claude Sonnet 4 | $3.000 | $15.000 | 1.7x-4.3x |
+| GPT-4o | $2.500 | $10.000 | 1.4x-2.9x |
+| Gemini 2.5 Pro | $1.250 | $10.000 | 0.7x-2.9x |
 
-数据来源：DeepSeek API定价页[5]、Anthropic定价页[7]、OpenAI定价页[8]。
+数据来源：DeepSeek API定价页[5]、Anthropic定价页[7]、OpenAI定价页[8]。注：DeepSeek V4 Pro标准价格为¥12/¥24每百万token（折合$1.74/$3.48），DeepSeek定期开展限时优惠活动（如2025年4月首发期2.5折，输入降至¥3/百万）。
 
-以一次典型编码会话（50K输入token + 10K输出token）计算，DeepSeek V4 Pro成本约$0.03，Claude Sonnet 4成本约$0.30，差距达10倍。对于日均10次会话的专业开发者，月度API成本分别为$9和$90。
+以一次典型编码会话（50K输入token + 10K输出token）计算，DeepSeek V4 Pro成本约$0.12，DeepSeek V4 Flash成本约$0.01，Claude Sonnet 4成本约$0.30。DeepSeek V4 Pro相比Claude Sonnet 4节约约60%，V4 Flash则节约约97%。对于日均10次会话的专业开发者，月度API成本分别约为$36（V4 Pro）、$3（V4 Flash）和$90（Claude Sonnet 4）。
 
 **reasoning_content机制。** DeepSeek V4系列在thinking模式下返回独立的`reasoning_content`字段，包含模型的思维链推理过程[9]。与Claude的thinking blocks不同，DeepSeek的reasoning_content在工具调用场景中必须保留并回传至后续请求，否则返回400错误。xsgbbx在QueryEngine中实现了完整的reasoning_content生命周期管理：收集（ReasoningCollector）-- 持久化（消息历史）-- 回传（API请求构造）-- 可视化（ReasoningViz仪表盘）。
 
@@ -115,7 +115,7 @@ DeepSeek V4 Pro在以下维度对AI编程场景具有显著优势：
 
 深度适配DeepSeek而非维持通用多模型平权，基于以下决策分析：
 
-1. **成本敏感性。** 表2数据显示，DeepSeek API成本仅为Claude Sonnet 4的1/7-1/17。对于中文开发者群体，成本是AI工具采纳的首要障碍。
+1. **成本敏感性。** 表2数据显示，DeepSeek V4 Pro API成本约为Claude Sonnet 4的58%（输入）和23%（输出），V4 Flash仅为Claude的1/21。对于中文开发者群体，成本是AI工具采纳的首要障碍。
 
 2. **中文能力。** DeepSeek在中文理解和生成方面具有天然优势，其训练语料中中文占比显著高于西方模型。
 
