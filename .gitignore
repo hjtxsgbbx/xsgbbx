@@ -27,5 +27,6 @@ agent_output.txt
 test-output.txt
 src/**/*.js
 src/**/*.d.ts
+!src/types/bun.d.ts
 src/**/*.js.map
 Thumbs.db
