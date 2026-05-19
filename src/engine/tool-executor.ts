@@ -1,6 +1,7 @@
 import type { ToolCall, ToolResult, ExecutionContext, Message } from "../types/index.js";
 import type { Tool } from "../tools/index.js";
 import type { PermissionPipeline } from "../permissions/index.js";
+import { classifyBashCommand } from "../permissions/index.js";
 import { hooksSystem } from "../security/hooks.js";
 import { invalidateEnvSnapshotCache } from "../observability/env-snapshot.js";
 import type { CostTracker } from "../observability/cost-tracker.js";
@@ -52,6 +53,45 @@ export class ToolExecutor {
 
   getToolMap(): Map<string, Tool> {
     return this.toolMap;
+  }
+
+  /**
+   * Extract the shell command string from a tool call, if applicable.
+   * Returns empty string for non-shell tools.
+   */
+  private extractShellCommand(tc: ToolCall): string {
+    if (tc.name !== 'shell_command') {
+      return '';
+    }
+    return (tc.arguments.command as string) || '';
+  }
+
+  /**
+   * Run the bash security classifier on a tool call's command.
+   * Returns a ToolResult if the command should be denied, null otherwise.
+   *
+   * - 'deny': Returns a blocked ToolResult immediately
+   * - 'ask':  Returns null (let the permission pipeline handle confirmation)
+   * - 'allow': Returns null (let the normal flow continue)
+   */
+  private checkBashSecurity(tc: ToolCall): ToolResult | null {
+    const command = this.extractShellCommand(tc);
+    if (command.length === 0) {
+      return null;
+    }
+
+    const classification = classifyBashCommand(command);
+
+    if (classification.tier === 'deny') {
+      return {
+        success: false,
+        output: `Bash security blocked [check ${classification.checkId ?? '?'}]: ${classification.reason}`,
+        errorCode: 'BASH_SECURITY_DENY',
+      };
+    }
+
+    // 'ask' and 'allow' continue through the normal flow
+    return null;
   }
 
   async executeWithHealing(
@@ -144,6 +184,13 @@ export class ToolExecutor {
       }
     }
 
+    // Bash security classification — deny dangerous shell commands immediately
+    const bashSecurityResult = this.checkBashSecurity(tc);
+    if (bashSecurityResult) {
+      callbacks.onPermissionDenied(bashSecurityResult.output, 'cache', false);
+      return bashSecurityResult;
+    }
+
     if (!tool.readonly) {
       const decision = await this.permissionPipeline.check(tc, execContext);
       if (!decision.allowed) {
@@ -223,6 +270,13 @@ export class ToolExecutor {
         const msg = hookErr instanceof Error ? hookErr.message : String(hookErr);
         callbacks.onError(`[PreToolUse:${tc.name}] Hook error (continuing): ${msg}`);
       }
+    }
+
+    // Bash security classification — deny dangerous shell commands immediately
+    const bashSecurityResult = this.checkBashSecurity(tc);
+    if (bashSecurityResult) {
+      callbacks.onPermissionDenied(bashSecurityResult.output, 'cache', false);
+      return bashSecurityResult;
     }
 
     // Simple retry loop without ErrorHealer dependency

@@ -14,6 +14,8 @@ import {
   clearCache as clearDecisionCache,
   matchRuleTier,
 } from "./rules.js";
+import { classifyBashCommand } from "./bash-classifier.js";
+import type { ClassifierResult } from "./bash-classifier.js";
 
 export type PermissionRuleType = "deny" | "ask" | "allow";
 
@@ -127,6 +129,16 @@ export class PermissionPipeline {
       return decision;
     }
 
+    // --- Layer 1: Primary bash security classifier (AST-backed, 23 checks) ---
+    if (command.length > 0) {
+      const bashDecision = this.primaryBashClassify(command);
+      if (bashDecision) {
+        addToCache(toolCall, bashDecision);
+        return bashDecision;
+      }
+    }
+
+    // --- Layer 2: Regex-based deny tier (fallback when classifier allows) ---
     if (command.length > 0) {
       const denyDecision = this.checkDenyTier(command, platform);
       if (denyDecision) {
@@ -157,6 +169,7 @@ export class PermissionPipeline {
       return decision;
     }
 
+    // --- Layer 3: Regex-based ask tier (fallback when classifier allows) ---
     if (command.length > 0) {
       const askDecision = this.checkAskTier(command, platform);
       if (askDecision) {
@@ -165,6 +178,7 @@ export class PermissionPipeline {
       }
     }
 
+    // --- Layer 4: Regex-based allow tier ---
     if (command.length > 0) {
       const allowDecision = this.checkAllowTier(command, platform);
       if (allowDecision) {
@@ -194,6 +208,14 @@ export class PermissionPipeline {
       };
     }
 
+    // Primary bash security classifier (Layer 1)
+    if (command.length > 0) {
+      const bashDecision = this.primaryBashClassify(command);
+      if (bashDecision) {
+        return bashDecision;
+      }
+    }
+
     if (command.length > 0) {
       const denyDecision = this.checkDenyTier(command, platform);
       if (denyDecision && !denyDecision.allowed) {
@@ -216,6 +238,12 @@ export class PermissionPipeline {
     platform: PlatformInfo
   ): PermissionDecision {
     if (command.length > 0) {
+      // Primary bash security classifier (Layer 1)
+      const bashDecision = this.primaryBashClassify(command);
+      if (bashDecision) {
+        return bashDecision;
+      }
+
       const denyDecision = this.checkDenyTier(command, platform);
       if (denyDecision && !denyDecision.allowed) {
         return denyDecision;
@@ -259,6 +287,12 @@ export class PermissionPipeline {
     }
 
     if (command.length > 0) {
+      // Primary bash security classifier (Layer 1)
+      const bashDecision = this.primaryBashClassify(command);
+      if (bashDecision) {
+        return bashDecision;
+      }
+
       const denyDecision = this.checkDenyTier(command, platform);
       if (denyDecision && !denyDecision.allowed) {
         return denyDecision;
@@ -304,6 +338,53 @@ export class PermissionPipeline {
       layer: "whitelist",
       canOverride: false,
     };
+  }
+
+  /**
+   * Primary bash command security classification using the AST-backed
+   * security validator chain (23 checks).
+   *
+   * This is the primary decision maker for shell commands. It runs BEFORE
+   * the regex-based rule matching. The classifier uses AST parsing when
+   * available and regex patterns as a fallback — providing more accurate
+   * detection of shell injection, command structure issues, and dangerous
+   * patterns than regex-only matching.
+   *
+   * @returns PermissionDecision if a security issue was found, null if the
+   *          classifier returned 'allow' (meaning "continue with regex checks")
+   */
+  private primaryBashClassify(command: string): PermissionDecision | null {
+    if (command.length === 0) {
+      return null;
+    }
+
+    const result: ClassifierResult = classifyBashCommand(command);
+
+    switch (result.tier) {
+      case 'deny':
+        return {
+          allowed: false,
+          reason: `BASH-SEC DENY [check ${result.checkId ?? '?'}]: ${result.reason}`,
+          layer: 'cache',
+          canOverride: false,
+        };
+
+      case 'ask':
+        return {
+          allowed: false,
+          reason: `BASH-SEC ASK [check ${result.checkId ?? '?'}]: ${result.reason}`,
+          layer: 'ai_classifier',
+          canOverride: true,
+          confirmationRequired: true,
+        };
+
+      case 'allow':
+        // Classifier passed — fall through to existing regex-based checks
+        return null;
+
+      default:
+        return null;
+    }
   }
 
   private checkDenyTier(command: string, platform: PlatformInfo): PermissionDecision | null {

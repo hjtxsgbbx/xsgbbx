@@ -26,7 +26,15 @@ import { APP_NAME } from "../core/constants.js";
 // Types
 // ---------------------------------------------------------------------------
 
-export type HookEvent = "PreToolUse" | "PostToolUse" | "Stop";
+export type HookEvent = "PreToolUse" | "PostToolUse" | "Stop" | string;
+
+/**
+ * External hook handler signature.
+ * Receives a context object and returns a HookResult-like outcome.
+ */
+export type HookHandler = (
+  context: Record<string, unknown>,
+) => Promise<{ allow: boolean; message?: string }>;
 
 export interface HookCommand {
   type: "command";
@@ -202,6 +210,90 @@ export async function executeHooks(
   }
 
   return results;
+}
+
+// ---------------------------------------------------------------------------
+// External hook registry (populated by plugins)
+// ---------------------------------------------------------------------------
+
+interface ExternalHookEntry {
+  event: string;
+  handler: HookHandler;
+}
+
+let externalHooks: ExternalHookEntry[] = [];
+
+/**
+ * Register a hook handler from an external source (plugin).
+ * Returns a new array — the original is never mutated.
+ */
+export function registerExternalHook(
+  event: string,
+  handler: HookHandler,
+): ExternalHookEntry[] {
+  externalHooks = [...externalHooks, { event, handler }];
+  return externalHooks;
+}
+
+/**
+ * Remove all external hooks registered for a given event.
+ * Returns a new array — the original is never mutated.
+ */
+export function unregisterExternalHooks(event: string): ExternalHookEntry[] {
+  externalHooks = externalHooks.filter((e) => e.event !== event);
+  return externalHooks;
+}
+
+/**
+ * Get all external hook handlers for a given event.
+ */
+export function getExternalHooks(event: string): HookHandler[] {
+  return externalHooks
+    .filter((e) => e.event === event)
+    .map((e) => e.handler);
+}
+
+/**
+ * Execute external (plugin-provided) hooks for an event.
+ * External hooks run AFTER configured hooks but BEFORE the action proceeds.
+ * If any external hook returns allow=false, the action is blocked.
+ */
+export async function executeExternalHooks(
+  event: string,
+  context: Record<string, unknown>,
+): Promise<HookResult[]> {
+  const handlers = getExternalHooks(event);
+  const results: HookResult[] = [];
+
+  for (const handler of handlers) {
+    try {
+      const outcome = await handler(context);
+      results.push({
+        ok: true,
+        event: event as HookEvent,
+        allow: outcome.allow,
+        message: outcome.message,
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      results.push({
+        ok: false,
+        event: event as HookEvent,
+        allow: false,
+        error: message,
+        message: `External hook error: ${message}`,
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Clear all externally registered hooks.
+ */
+export function clearExternalHooks(): void {
+  externalHooks = [];
 }
 
 // ---------------------------------------------------------------------------

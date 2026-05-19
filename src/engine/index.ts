@@ -12,5 +12,16 @@ export {
   executeStopHooks,
   loadHooksSettings,
   saveHooksSettings,
+  registerExternalHook,
+  unregisterExternalHooks,
+  getExternalHooks,
+  executeExternalHooks,
+  clearExternalHooks,
 } from "./hook-system.js";
-export type { HookConfig, HookEvent, HookResult, HooksSettings } from "./hook-system.js";
+export type {
+  HookConfig,
+  HookEvent,
+  HookResult,
+  HooksSettings,
+  HookHandler,
+} from "./hook-system.js";

@@ -497,6 +497,16 @@ async function startMain(): Promise<void> {
     process.exit(ExitCode.CONFIG_ERROR);
   }
 
+  // ----- Plugin initialization -----
+  try {
+    const { initializePlugins } = await import("./plugins/index.js");
+    await initializePlugins();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Plugin initialization warning: ${message}`);
+    // Plugin init failure is non-fatal — the host continues.
+  }
+
   if (isHeadless) {
     const prompt = getFlagValue(["-p"]);
     if (prompt) {

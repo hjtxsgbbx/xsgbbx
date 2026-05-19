@@ -4,5 +4,11 @@ export type { GrepTool, GlobTool, ReadFileTool, GitLogTool, GitStatusTool, LSToo
 export { createWriteTools, getAllTools } from "./write-tools.js";
 export type { EditFileTool, WriteFileTool, ShellCommandTool, GitCommitTool, GitPushTool } from "./write-tools.js";
 export { StreamingToolExecutor, findToolByName, getToolSignatures } from "./executor.js";
+export {
+  registerExternalTool,
+  unregisterExternalTool,
+  getExternalTools,
+  clearExternalTools,
+} from "./external-tools.js";
 export { MCPManager, MCPToolAdapter, mcpManager } from "../mcp/index.js";
 export type { MCPServerConfig, MCPToolDefinition } from "../mcp/types.js";

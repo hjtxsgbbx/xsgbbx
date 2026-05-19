@@ -3,6 +3,81 @@ import type { CommandModule, CommandContext, CommandResult } from "./types.js";
 export type { CommandModule, CommandContext, CommandResult } from "./types.js";
 
 /**
+ * External command handler — simplified signature for plugin-provided commands.
+ * Receives the raw arg string and context, returns a result.
+ */
+export type CommandHandler = (
+  args: string,
+  context: CommandContext,
+) => Promise<CommandResult>;
+
+// ---------------------------------------------------------------------------
+// External command registry (populated by plugins)
+// ---------------------------------------------------------------------------
+
+interface ExternalCommandEntry {
+  name: string;
+  handler: CommandHandler;
+  aliases: string[];
+}
+
+let externalCommands: ExternalCommandEntry[] = [];
+
+/**
+ * Register a slash command from an external source (plugin).
+ * Returns a new array — the original is never mutated.
+ */
+export function registerExternalCommand(
+  name: string,
+  handler: CommandHandler,
+): ExternalCommandEntry[] {
+  // Remove any existing entry with the same name
+  const filtered = externalCommands.filter((c) => c.name !== name);
+  externalCommands = [...filtered, { name, handler, aliases: [] }];
+  return externalCommands;
+}
+
+/**
+ * Unregister an external command by name.
+ * Returns a new array — the original is never mutated.
+ */
+export function unregisterExternalCommand(name: string): ExternalCommandEntry[] {
+  externalCommands = externalCommands.filter((c) => c.name !== name);
+  return externalCommands;
+}
+
+/**
+ * Get all external command handlers as CommandModule-compatible objects.
+ */
+export function getExternalCommandModules(): CommandModule[] {
+  return externalCommands.map((entry) => ({
+    name: entry.name,
+    aliases: entry.aliases,
+    description: `External command: ${entry.name}`,
+    argumentHint: "",
+    execute: entry.handler,
+  }));
+}
+
+/**
+ * Build a CommandRegistry pre-loaded with external commands.
+ * Useful for merging external commands into the main registry.
+ */
+export function loadExternalIntoRegistry(
+  registry: import("./index.js").CommandRegistry,
+): void {
+  for (const mod of getExternalCommandModules()) {
+    if (!registry.has(mod.name)) {
+      registry.register(mod);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// CommandRegistry
+// ---------------------------------------------------------------------------
+
+/**
  * CommandRegistry — central dispatcher for slash commands.
  *
  * Each command is a first-class module implementing CommandModule.

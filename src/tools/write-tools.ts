@@ -7,6 +7,7 @@ import { resolveSafePath } from "../security/path-guard.js";
 import { sandbox } from "../security/sandbox.js";
 import { applyEdit } from "./diff-edit.js";
 import { extractStringParam, extractRequiredStringParam } from "../api/utils.js";
+import { getExternalTools } from "./external-tools.js";
 
 export class EditFileTool implements Tool {
   name = "edit_file";
@@ -375,5 +376,6 @@ export function getAllTools(): Tool[] {
     new ShellCommandTool(),
     new GitCommitTool(),
     new GitPushTool(),
+    ...getExternalTools(),
   ];
 }
