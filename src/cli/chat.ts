@@ -33,6 +33,10 @@ export async function startCLI(opts: StartCLIOptions): Promise<void> {
   let buf = "";
   process.stdin.setEncoding("utf-8");
 
+  // Try to set raw mode to prevent terminal double-echo
+  const isTTY = (process.stdin as unknown as { isTTY?: boolean }).isTTY;
+  const hasRawMode = isTTY && (() => { try { (process.stdin as unknown as { setRawMode(m: boolean): void }).setRawMode(true); return true; } catch { return false; } })();
+
   process.stdin.on("data", (chunk: string) => {
     for (const ch of chunk) {
       const c = ch.charCodeAt(0);
@@ -44,8 +48,11 @@ export async function startCLI(opts: StartCLIOptions): Promise<void> {
         else { process.stdout.write("\n> "); }
         return;
       }
-      if (c === 8 || c === 127) { if (buf.length > 0) buf = buf.slice(0, -1); continue; }
-      if (c >= 32) { buf += ch; process.stdout.write(ch); }
+      if (c === 8 || c === 127) {
+        if (buf.length > 0) { buf = buf.slice(0, -1); if (hasRawMode) process.stdout.write("\b \b"); }
+        continue;
+      }
+      if (c >= 32) { buf += ch; if (hasRawMode) process.stdout.write(ch); }
     }
   });
 
