@@ -557,15 +557,9 @@ export class QueryEngineImpl extends EventEmitter implements QueryEngine {
         const hasToolCalls = streamResult.toolCalls.length > 0;
         const stopReason: StopReason = hasToolCalls ? "tool_use" : "end_turn";
 
-        // Append assistant text message (only when no tool calls — tool calls
-        // create their own assistant message via appendToolMessages).
-        if (streamResult.content && !hasToolCalls) {
-          this.deliveryManager.appendAssistantMessage(
-            context,
-            streamResult.content,
-            streamResult.reasoningContent,
-          );
-        }
+        // NOTE: Do NOT append assistant message to context.messages here.
+        // The caller (app.tsx) adds it from the return value.
+        // Double-append causes message array corruption and response lag.
 
         // Track token usage
         if (this.costTracker && streamResult.usage) {
