@@ -120,10 +120,17 @@ export class OpenAICompatibleProvider implements AIProvider {
       ...messages.map((m) => formatOpenAIMessage(m)),
     ];
 
+    // Debug: log the last user message being sent
+    const lastUserMsg = [...messages].reverse().find(m => m.role === "user");
+    if (lastUserMsg) {
+      const content = typeof lastUserMsg.content === "string" ? lastUserMsg.content.slice(0, 80) : "(tool_calls)";
+      console.error(`[xsgbbx] API call → ${messages.length} msgs, last user: "${content}"`);
+    }
+
     const model = config.model || FALLBACK_MODEL;
     const body: Record<string, unknown> = {
       model,
-      max_tokens: LIMITS.DEFAULT_MAX_TOKENS,
+      max_tokens: model.includes("deepseek") ? 8192 : LIMITS.DEFAULT_MAX_TOKENS,
       messages: allMessages,
       tools: toolDefs.length > 0 ? toolDefs : undefined,
       temperature: 0.3,
@@ -193,17 +200,22 @@ export class OpenAICompatibleProvider implements AIProvider {
       ...messages.map((m) => formatOpenAIMessage(m)),
     ];
 
+    // Debug: log the last user message being sent
+    const lastUserMsg = [...messages].reverse().find(m => m.role === "user");
+    if (lastUserMsg) {
+      const content = typeof lastUserMsg.content === "string" ? lastUserMsg.content.slice(0, 80) : "(tool_calls)";
+      console.error(`[xsgbbx] API stream → ${messages.length} msgs, last user: "${content}"`);
+    }
+
+    const model = config.model || FALLBACK_MODEL;
     const body: Record<string, unknown> = {
-      model: config.model || FALLBACK_MODEL,
-      max_tokens: LIMITS.DEFAULT_MAX_TOKENS,
+      model,
+      max_tokens: model.includes("deepseek") ? 8192 : LIMITS.DEFAULT_MAX_TOKENS,
       stream: true,
       messages: allMessages,
       tools: toolDefs.length > 0 ? toolDefs : undefined,
       temperature: 0.3,
     };
-    if ((config.model || FALLBACK_MODEL).includes("deepseek")) {
-      body.thinking = { type: "disabled" };
-    }
 
     const response = await fetch(this.getChatEndpoint(), {
       method: "POST",
